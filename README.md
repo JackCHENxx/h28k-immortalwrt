@@ -15,7 +15,7 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 | `files/rk3528-hinlink-h28k.dts` | 板级设备树：gmac1(RTL8211F)、PCIe 侧 RTL8111H、eMMC/SD、ADC 按键、三颗 LED、PWM 调压。放在目标树 `files/` 下，`prepare` 时并入内核树，由 image 系统的 `Image/BuildDTB` 直接编译，不用改内核 dts Makefile |
 | `patches/uboot-board-rockchip-add-HINLINK-H28K.patch` | U-Boot defconfig + u-boot dts，新增 `hinlink-h28k-rk3528` 目标 |
 | `scripts/adapt.py` 内联改动 | `armv8.mk` 设备定义、`uboot-rockchip/Makefile` 目标、`base-files` 的 LAN/WAN 网口（含默认 IP）、LED、IRQ 绑核 |
-| `files/overlay/etc/uci-defaults/99-h28k-tuning` | 首次开机调优：zram 1.5G、swappiness 80、packet steering、flow offload，并预置旁路由一键按钮 |
+| `files/overlay/etc/uci-defaults/99-h28k-tuning` | 首次开机调优：zram 按内存自适应（2GB→1.5G、4GB→3G）、swappiness 80、packet steering、flow offload，并预置旁路由/恢复备份按钮 |
 | `files/overlay/usr/bin/netmode` | 向导后端脚本（`setup bypass/dhcp/pppoe`、`detect`、`bypass` / `router` / `lanip` / `dhcp` / `status`） |
 | `package/luci-app-netmode` | 自带 LuCI 应用：**网络 → 网络向导**，三步流程（选方式 → 填参数 → 完成），三种联网方式（宽带拨号 / 连现有路由 / 旁路由） |
 
@@ -25,7 +25,7 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 
 1. 把本目录推到自己的仓库（`.github/workflows/build-h28k.yml` 必须一起推上去）。
 2. Actions 里跑 `Build ImmortalWrt for HINLINK H28K`，`tag` 留空 = 自动取最新 release。
-3. 跑完在 Artifacts 下拿 `immortalwrt-h28k`，里面就是 `.img.gz` + `sha256sums.txt` + `build-info.txt`。
+3. 跑完在 Artifacts 下拿 `immortalwrt-h28k`；同时会自动发一个 Release（指定 tag 就发到该 tag，否则更新 `h28k-latest`），Releases 页可直接下载，不用登录 Actions。
    工作流默认每周一自动跟一次最新 release。
 
 ## 方式二：本机/服务器编译
@@ -87,12 +87,12 @@ hinlink,h28k)
 
 | 项 | 值 | 理由 |
 | --- | --- | --- |
-| `system.zram_size_mb` | 1536 | 2GB 内存给 1.5G 压缩 swap（lzo-rle 约 2~2.5:1，实际只吃掉约 600MB 内存），只是容量上限，不预占内存 |
+| `system.zram_size_mb` | 2GB→1536；4GB→3072 | 按 `/proc/meminfo` 实测内存自适应；lzo-rle 约 2~2.5:1，只是容量上限，不预占内存 |
 | `system.zram_priority` | 100 | 高于任何磁盘 swap，冷页优先压进内存 |
 | `vm.swappiness` | 80 | 有 zram 时更积极换出冷数据；写入 `/etc/sysctl.d/90-h28k-zram.conf` |
 | `network.packet_steering` | 1 | 四核 A53 上把网卡软中断分摊到多核（ImmortalWrt 默认只对 x86/mt7621/bcm53xx 开） |
 | `firewall.@defaults[0].flow_offloading` | 1 | 软件快速路径（fw4），RK3528 上做 NAT 转发才跑得满千兆 |
-| zram `mem_limit` | 1024MB | 压缩后最多占 1GB，极端不可压数据也不会把 2GB 内存吃穿 |
+| zram `mem_limit` | 内存的一半 | 2GB→1GB、4GB→2GB，极端不可压数据也不会把内存吃穿 |
 | `dhcp.lan.start` / `limit` / `leasetime` | 38 / 206 / 24h | 地址池 `192.168.2.38–243`，与 EdgeRouter（EdgeOS）默认一致；同时写进 dnsmasq 默认模板，恢复出厂也是这套 |
 
 注意：`flow_offloading=1` 和 SQM/QoS 流控冲突，以后要限速，在 LuCI「网络 → 防火墙」里关掉软件流量分载即可；
@@ -132,7 +132,10 @@ netmode setup pppoe 宽带账号 宽带密码 192.168.2.1
 netmode router                 # 只恢复主路由默认（WAN DHCP）
 netmode lanip 192.168.1.2      # 只改 IP
 netmode dhcp off               # 只关 DHCP
+netmode restore                # 回到第一次改网络配置之前（失联自救）
 ```
+
+每次真正改配置前，`netmode` 会把 `network` / `dhcp` / `firewall` / `netmode` 备份到 `/etc/netmode-backup`（只备份第一次，后续改动不会覆盖原始值）。改错 IP、旁路由切过去连不上时，SSH 进去执行 `netmode restore` 就能回滚；LuCI「系统 → 自定义命令」里也预置了「④ 恢复上次备份」。
 
 典型旁路由接法（主路由同网段）：
 

@@ -84,6 +84,35 @@ ensure_forward() {
 	uci -q set firewall.$sec.dest="$2"
 }
 
+BACKUP=/etc/netmode-backup
+
+# 改动网络配置前先留一份原始配置：改错 IP 或旁路由失联时，
+# SSH 进来执行 `netmode restore` 就能回到改之前的状态。
+backup_once() {
+	[ -d "$BACKUP" ] && return 0
+	mkdir -p "$BACKUP" || return 0
+	chmod 700 "$BACKUP"
+	for f in network dhcp firewall netmode; do
+		[ -f "/etc/config/$f" ] && cp -a "/etc/config/$f" "$BACKUP/$f" && chmod 600 "$BACKUP/$f"
+	done
+	date '+%Y-%m-%d %H:%M:%S' > "$BACKUP/created"
+	echo "已备份原始网络配置到 $BACKUP"
+}
+
+cmd_restore() {
+	[ -d "$BACKUP" ] || { echo "没有可用的备份（$BACKUP）"; exit 1; }
+	for f in network dhcp firewall netmode; do
+		if [ -f "$BACKUP/$f" ]; then
+			cp -a "$BACKUP/$f" "/etc/config/$f"
+		else
+			[ "$f" = "netmode" ] && rm -f "/etc/config/netmode"
+		fi
+	done
+	reload_all
+	echo "已恢复备份（备份时间: $(cat "$BACKUP/created" 2>/dev/null || echo 未知)）"
+	echo "当前 LAN IP: $(lan_ip)"
+}
+
 reload_all() {
 	/etc/init.d/network reload >/dev/null 2>&1
 	/etc/init.d/firewall reload >/dev/null 2>&1
@@ -109,12 +138,14 @@ cmd_status() {
 	else
 		echo "WireGuard  : 未启用"
 	fi
+	echo "配置备份   : $([ -d "$BACKUP" ] && echo "$BACKUP（$(cat "$BACKUP/created" 2>/dev/null)）" || echo '无')"
 	[ -n "$idx" ] && echo "LAN NAT    : $(uci -q get firewall.@zone[$idx].masq || echo '0')"
 }
 
 cmd_bypass() {
 	local up idx
 	ensure_conf
+	backup_once
 	up="${1:-$(upstream)}"
 	uci -q set ${CONF}.@mode[0].mode='bypass'
 	uci -q set ${CONF}.@mode[0].upstream="$up"
@@ -151,6 +182,7 @@ cmd_bypass() {
 cmd_router() {
 	local idx wz
 	ensure_conf
+	backup_once
 	uci -q set ${CONF}.@mode[0].mode='router'
 
 	uci -q set dhcp.lan.ignore='0'
@@ -179,6 +211,7 @@ cmd_router() {
 
 cmd_lanip() {
 	[ -n "$1" ] || { echo "用法: netmode lanip <IP>"; exit 1; }
+	backup_once
 	is_ipv4 "$1" || { echo "错误: $1 不是合法的 IPv4 地址"; exit 1; }
 	uci -q set network.lan.ipaddr="$1"
 	uci -q commit network
@@ -215,6 +248,7 @@ wizard_usage() {
 # 向导后端：一次把 LAN IP / WAN / DHCP / NAT 配到位，供 LuCI 网络向导调用
 cmd_setup() {
 	local kind="$1" ip="" up=""
+	backup_once
 
 	case "$kind" in
 		bypass)
@@ -320,5 +354,6 @@ case "$1" in
 	dhcp) shift; cmd_dhcp "$@" ;;
 	detect) cmd_detect ;;
 	setup) shift; cmd_setup "$@" ;;
-	*) echo "用法: netmode [status|bypass [主路由IP]|router|lanip <IP>|dhcp on|off|detect|setup ...]"; exit 1 ;;
+	restore) cmd_restore ;;
+	*) echo "用法: netmode [status|bypass [主路由IP]|router|restore|lanip <IP>|dhcp on|off|detect|setup ...]"; exit 1 ;;
 esac

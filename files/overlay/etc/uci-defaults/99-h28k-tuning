@@ -12,9 +12,16 @@ uci -q set dhcp.lan.start='38'
 uci -q set dhcp.lan.limit='206'
 uci -q set dhcp.lan.leasetime='24h'
 
-# 2) zram：2GB 机型给 1536MB 压缩 swap。lzo-rle 是这版内核的默认压缩算法（约 2~2.5:1），
-#    zram 只是容量上限，不预占内存；priority 100 高于任何磁盘 swap。
-uci -q set system.@system[0].zram_size_mb='1536'
+# 2) zram：按实际内存自适应（2GB→1536MB，4GB→3072MB），兼容 2/4GB 两种板子。
+#    lzo-rle 是这版内核的默认压缩算法（约 2~2.5:1），zram 只是容量上限，不预占内存；
+#    priority 100 高于任何磁盘 swap。
+mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null)
+if [ "${mem_kb:-0}" -ge 3500000 ]; then
+	zram_mb=3072; zram_cap_mb=2048
+else
+	zram_mb=1536; zram_cap_mb=1024
+fi
+uci -q set system.@system[0].zram_size_mb="$zram_mb"
 uci -q set system.@system[0].zram_priority='100'
 
 # 3) 有 zram 时更积极换出冷数据，热点数据仍留在物理内存
@@ -49,6 +56,10 @@ uci -q set luci.netmode_status='command'
 uci -q set luci.netmode_status.name='③ 查看当前模式/网口状态（只读）'
 uci -q set luci.netmode_status.command='/usr/bin/netmode status'
 
+uci -q set luci.netmode_restore='command'
+uci -q set luci.netmode_restore.name='④ 恢复上次备份（改错 IP 失联自救）'
+uci -q set luci.netmode_restore.command='/usr/bin/netmode restore'
+
 uci -q commit firewall
 uci -q commit system
 uci -q commit network
@@ -60,8 +71,8 @@ uci -q commit luci
 if [ -x /etc/init.d/zram ]; then
 	/etc/init.d/zram enable
 	/etc/init.d/zram start >/dev/null 2>&1
-	# 上限保护：zram 压缩后最多占 1GB，避免极端不可压数据把 2GB 内存吃穿
-	[ -e /sys/block/zram0/mem_limit ] && echo 1073741824 > /sys/block/zram0/mem_limit 2>/dev/null
+	# 上限保护：压缩后最多占内存的一半（2GB→1GB，4GB→2GB），避免极端不可压数据把内存吃穿
+	[ -e /sys/block/zram0/mem_limit ] && echo $((zram_cap_mb * 1024 * 1024)) > /sys/block/zram0/mem_limit 2>/dev/null
 fi
 
 exit 0

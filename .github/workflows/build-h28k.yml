@@ -67,3 +67,16 @@ jobs:
           path: out/
           if-no-files-found: error
           retention-days: 30
+
+      - name: 发布 Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REL="${{ inputs.tag }}"
+          [ -n "$REL" ] || REL="h28k-latest"
+          if ! gh release view "$REL" >/dev/null 2>&1; then
+            gh release create "$REL" --title "ImmortalWrt H28K ${REL}" \
+              --notes "自动构建（$(date -u +%Y-%m-%d)），设备 HINLINK H28K / RK3528"
+          fi
+          gh release upload "$REL" out/*.gz out/sha256sums.txt out/build-info.txt --clobber
