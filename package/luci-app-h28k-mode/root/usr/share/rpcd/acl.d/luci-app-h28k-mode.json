@@ -1,0 +1,17 @@
+{
+	"luci-app-h28k-mode": {
+		"description": "H28K 网络向导：执行 h28k-mode，并读写 network / dhcp / firewall / h28k 配置",
+		"read": {
+			"file": {
+				"/usr/bin/h28k-mode": [ "exec" ]
+			},
+			"uci": [ "network", "dhcp", "firewall", "h28k" ]
+		},
+		"write": {
+			"file": {
+				"/usr/bin/h28k-mode": [ "exec" ]
+			},
+			"uci": [ "network", "dhcp", "h28k" ]
+		}
+	}
+}

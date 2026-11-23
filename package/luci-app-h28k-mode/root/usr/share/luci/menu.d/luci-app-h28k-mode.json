@@ -1,0 +1,13 @@
+{
+	"admin/network/h28k_mode": {
+		"title": "网络向导",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "h28k_mode/guide"
+		},
+		"depends": {
+			"acl": [ "luci-app-h28k-mode" ]
+		}
+	}
+}

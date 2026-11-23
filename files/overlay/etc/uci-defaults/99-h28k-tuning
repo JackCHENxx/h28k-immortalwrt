@@ -1,0 +1,60 @@
+#!/bin/sh
+# H28K 首次开机调优（只跑一次，之后由 UCI 生效）
+# 仅对 HINLINK H28K 生效，其它板子直接退出。
+. /lib/functions.sh
+[ "$(board_name)" = "hinlink,h28k" ] || exit 0
+
+# 1) 默认网段的 192.168.2.1/24 已经写进 board.json（board.d/02_network 的 ipaddr），
+#    开机由 config_generate 直接生成，这里只补 DHCP 池 100~249。
+#    （本脚本只在首次开机 /overlay 重置时跑；已刷过旧固件的设备升级不会重跑。）
+uci -q set dhcp.lan.start='100'
+uci -q set dhcp.lan.limit='150'
+
+# 2) zram：2GB 机型给 1536MB 压缩 swap。lzo-rle 是这版内核的默认压缩算法（约 2~2.5:1），
+#    zram 只是容量上限，不预占内存；priority 100 高于任何磁盘 swap。
+uci -q set system.@system[0].zram_size_mb='1536'
+uci -q set system.@system[0].zram_priority='100'
+
+# 3) 有 zram 时更积极换出冷数据，热点数据仍留在物理内存
+echo 'vm.swappiness=80' > /etc/sysctl.d/90-h28k-zram.conf
+sysctl -qw vm.swappiness=80 2>/dev/null
+
+# 4) 四核 A53：把网卡中断/软中断分摊到多核，并启用软件快速路径
+#    （若之后用 SQM/QoS 流控，请在 网络-防火墙 里关掉 flow offloading）
+uci -q set network.globals='globals'
+uci -q set network.@globals[0].packet_steering='1'
+uci -q set network.@globals[0].flow_offloading='1'
+
+# 5) 主路由/旁路由模式状态（确保配置文件存在，uci 才写得进去） + 旁路由上游（供 h28k-mode 使用）
+touch /etc/config/h28k
+uci -q set h28k.mode='mode'
+uci -q set h28k.@mode[0].mode='router'
+uci -q set h28k.@mode[0].upstream='192.168.2.254'
+
+# 6) 在 LuCI「系统 → 自定义命令」里预置三个一键按钮（luci-app-commands）
+touch /etc/config/luci
+uci -q set luci.h28k_bypass='command'
+uci -q set luci.h28k_bypass.name='① 切换为旁路由（关 DHCP，网关→192.168.2.254）'
+uci -q set luci.h28k_bypass.command='/usr/bin/h28k-mode bypass'
+
+uci -q set luci.h28k_router='command'
+uci -q set luci.h28k_router.name='② 恢复主路由（开 DHCP/WAN）'
+uci -q set luci.h28k_router.command='/usr/bin/h28k-mode router'
+
+uci -q set luci.h28k_status='command'
+uci -q set luci.h28k_status.name='③ 查看当前模式/网口状态（只读）'
+uci -q set luci.h28k_status.command='/usr/bin/h28k-mode status'
+
+uci -q commit system
+uci -q commit network
+uci -q commit dhcp
+uci -q commit h28k
+uci -q commit luci
+
+# 7) zram 服务默认不开机自启，这里补上并当场启动，不用等重启
+if [ -x /etc/init.d/zram ]; then
+	/etc/init.d/zram enable
+	/etc/init.d/zram start >/dev/null 2>&1
+fi
+
+exit 0
