@@ -8,7 +8,7 @@
   2. 在 target/linux/rockchip/image/armv8.mk 增加 hinlink_h28k 设备定义；
   3. 在 package/boot/uboot-rockchip 增加 hinlink-h28k-rk3528 的 U-Boot 目标与补丁；
   4. 在 armv8 的 base-files 里登记 H28K 的 LAN/WAN 网口（含默认 IP 192.168.2.1）、LED 与 IRQ 绑核；
-  5. 投放随套件自带的 LuCI 应用 package/luci-app-h28k-mode（网络向导：一键主路由/旁路由）。
+  5. 投放随套件自带的 LuCI 应用 package/luci-app-netmode（网络向导：一键主路由/旁路由）。
 
 上游 ImmortalWrt 若某天自己收录了 H28K，脚本会自动跳过对应步骤。
 用法: python3 scripts/adapt.py <immortalwrt 源码目录>
@@ -135,12 +135,18 @@ def main():
     note("已投放目标 overlay（开机调优）: " + os.path.relpath(tuning_dst, SRC))
 
     # 1c. LuCI 网络向导（自有 app，等价 iStoreOS 的“网络向导”，不依赖其闭源 quickstart）
-    pkg_src = os.path.join(KIT, "package", "luci-app-h28k-mode")
-    pkg_dst = os.path.join(SRC, "package", "luci-app-h28k-mode")
+    # 清掉旧命名（<=v5 曾用 luci-app-h28k-mode），避免旧包残留
+    legacy = os.path.join(SRC, "package", "luci-app-h28k-mode")
+    if os.path.isdir(legacy):
+        shutil.rmtree(legacy)
+        note("已清理旧应用目录: package/luci-app-h28k-mode")
+
+    pkg_src = os.path.join(KIT, "package", "luci-app-netmode")
+    pkg_dst = os.path.join(SRC, "package", "luci-app-netmode")
     if os.path.isdir(pkg_dst):
         shutil.rmtree(pkg_dst)
     shutil.copytree(pkg_src, pkg_dst)
-    note("已投放 LuCI 网络向导: package/luci-app-h28k-mode")
+    note("已投放 LuCI 网络向导: package/luci-app-netmode")
 
     # 2. 镜像设备定义
     insert_before(image_mk, "define Device/radxa_e20c\n", DEVICE_BLOCK, "Device/hinlink_h28k")
@@ -212,7 +218,7 @@ def main():
         "内核 dts": os.path.exists(dts_dst),
         "开机调优": os.access(tuning_dst, os.X_OK),
         "网络向导弹出": os.path.exists(os.path.join(
-            pkg_dst, "htdocs/luci-static/resources/view/h28k_mode/guide.js")),
+            pkg_dst, "htdocs/luci-static/resources/view/netmode/guide.js")),
     }
     bad = [k for k, v in checks.items() if not v]
     print("\n[adapt] 自检: " + ", ".join("%s=%s" % (k, "OK" if v else "FAIL") for k, v in checks.items()))

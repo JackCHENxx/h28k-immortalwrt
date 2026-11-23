@@ -16,8 +16,8 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 | `patches/uboot-board-rockchip-add-HINLINK-H28K.patch` | U-Boot defconfig + u-boot dts，新增 `hinlink-h28k-rk3528` 目标 |
 | `scripts/adapt.py` 内联改动 | `armv8.mk` 设备定义、`uboot-rockchip/Makefile` 目标、`base-files` 的 LAN/WAN 网口（含默认 IP）、LED、IRQ 绑核 |
 | `files/overlay/etc/uci-defaults/99-h28k-tuning` | 首次开机调优：zram 1.5G、swappiness 80、packet steering、flow offload，并预置旁路由一键按钮 |
-| `files/overlay/usr/bin/h28k-mode` | 向导后端脚本（`setup bypass/dhcp/pppoe`、`detect`、`bypass` / `router` / `lanip` / `dhcp` / `status`） |
-| `package/luci-app-h28k-mode` | 自带 LuCI 应用：**网络 → 网络向导**，三步流程（选方式 → 填参数 → 完成），三种联网方式（宽带拨号 / 连现有路由 / 旁路由） |
+| `files/overlay/usr/bin/netmode` | 向导后端脚本（`setup bypass/dhcp/pppoe`、`detect`、`bypass` / `router` / `lanip` / `dhcp` / `status`） |
+| `package/luci-app-netmode` | 自带 LuCI 应用：**网络 → 网络向导**，三步流程（选方式 → 填参数 → 完成），三种联网方式（宽带拨号 / 连现有路由 / 旁路由） |
 
 `adapt.py` 是幂等的：重复执行只会跳过；如果哪天 ImmortalWrt 自己收录了 H28K，对应步骤会自动跳过，不用改脚本。
 
@@ -79,7 +79,7 @@ hinlink,h28k)
 两个边界要知道：
 
 - 已经跑过系统的机器升级，`/etc/config/network` 是已有的，不会被固件默认值覆盖（这是 OpenWrt 的正常行为，保护你的配置）；
-- 旁路由脚本里 `h28k-mode lanip 192.168.1.2` 改的是**当前运行配置**，不会改固件默认值，恢复出厂后仍回到 `192.168.2.1`。
+- 旁路由脚本里 `netmode lanip 192.168.1.2` 改的是**当前运行配置**，不会改固件默认值，恢复出厂后仍回到 `192.168.2.1`。
 
 ## 默认调优（首次开机自动生效）
 
@@ -104,11 +104,11 @@ hinlink,h28k)
 
 | 入口 | 做什么 | 底层命令 |
 | --- | --- | --- |
-| 宽带拨号连接（红） | WAN 口 PPPoE 拨号，本机做主路由，开 DHCP + NAT | `h28k-mode setup pppoe <账号> <密码> [本机IP]` |
-| 连接现有路由器（绿） | WAN 口 DHCP 自动获取 IP，本机做主路由，开 DHCP + NAT | `h28k-mode setup dhcp [本机IP]` |
-| 配置为旁路由（蓝） | LAN 静态、网关/DNS 指向主路由、关本机 DHCP/RA、禁 WAN、LAN 开 masq | `h28k-mode setup bypass <主路由IP> [本机IP]` |
+| 宽带拨号连接（红） | WAN 口 PPPoE 拨号，本机做主路由，开 DHCP + NAT | `netmode setup pppoe <账号> <密码> [本机IP]` |
+| 连接现有路由器（绿） | WAN 口 DHCP 自动获取 IP，本机做主路由，开 DHCP + NAT | `netmode setup dhcp [本机IP]` |
+| 配置为旁路由（蓝） | LAN 静态、网关/DNS 指向主路由、关本机 DHCP/RA、禁 WAN、LAN 开 masq | `netmode setup bypass <主路由IP> [本机IP]` |
 
-参数页会预填当前 LAN IP，旁路由的主路由地址会用 `h28k-mode detect` 探测（优先取现有 LAN 网关，
+参数页会预填当前 LAN IP，旁路由的主路由地址会用 `netmode detect` 探测（优先取现有 LAN 网关，
 其次取默认路由），探不到才回落到 `192.168.2.254`。应用后进完成页：显示本机地址、执行输出和下一步提示，
 并提供「进入后台」/「再配置一次」。改过 LAN IP 的话，6 秒后自动跳到新地址。
 
@@ -117,19 +117,19 @@ hinlink,h28k)
 
 > 为什么没直接装 iStoreOS 的 quickstart：它的 `quickstart` / `quickstart-netpolicy` / `luci-app-quickstart`
 > 只有 KoolCenter 的预编译 ipk，源码不开，还绑着 iStoreOS 自己的 API。这里按同样的交互做了一个
-> 纯 shell + LuCI JS 的实现，源码全部在 `package/luci-app-h28k-mode` 里，可审计、可改。
+> 纯 shell + LuCI JS 的实现，源码全部在 `package/luci-app-netmode` 里，可审计、可改。
 
 命令行同样可用（向导页面就是调这些）：
 
 ```sh
-h28k-mode status
-h28k-mode detect                 # 探测上级网关
-h28k-mode setup bypass 192.168.2.254 192.168.2.1
-h28k-mode setup dhcp 192.168.2.1
-h28k-mode setup pppoe 宽带账号 宽带密码 192.168.2.1
-h28k-mode router                 # 只恢复主路由默认（WAN DHCP）
-h28k-mode lanip 192.168.1.2      # 只改 IP
-h28k-mode dhcp off               # 只关 DHCP
+netmode status
+netmode detect                 # 探测上级网关
+netmode setup bypass 192.168.2.254 192.168.2.1
+netmode setup dhcp 192.168.2.1
+netmode setup pppoe 宽带账号 宽带密码 192.168.2.1
+netmode router                 # 只恢复主路由默认（WAN DHCP）
+netmode lanip 192.168.1.2      # 只改 IP
+netmode dhcp off               # 只关 DHCP
 ```
 
 典型旁路由接法（主路由同网段）：
@@ -138,6 +138,23 @@ h28k-mode dhcp off               # 只关 DHCP
 2. H28K 用网线接到主路由的交换机侧，后台地址仍是 `192.168.2.1`；
 3. 向导里选「配置为旁路由」，填主路由 IP，应用；
 4. 把主路由 DHCP 下发的网关/DNS 改成 `192.168.2.1`，或只改需要走它的终端。
+
+## 通用层与设备层（方便适配别的板子）
+
+这套东西刻意拆成两层，换设备时只动设备层：
+
+| 层 | 文件 | 是否设备相关 |
+| --- | --- | --- |
+| 通用网络逻辑 | `files/overlay/usr/bin/netmode` | 否。只读写 `network` / `dhcp` / `firewall` 的 UCI，接口名从配置里取 |
+| 通用 LuCI 应用 | `package/luci-app-netmode` | 否。菜单「网络 → 网络向导」，三种联网方式 |
+| 设备板级支持 | `files/rk3528-hinlink-h28k.dts`、`patches/uboot-*.patch`、`adapt.py` 里的 `Device/` 与 `board.d` 改动 | 是 |
+| 设备默认参数 | `files/overlay/etc/uci-defaults/99-h28k-tuning`（内有 `board_name` 门禁） | 是 |
+
+`netmode` 能用在任意 OpenWrt 上：`setup bypass/dhcp/pppoe`、`detect`、`lanip`、`dhcp on|off` 都只依赖标准 `lan`/`wan` 接口与 `firewall` 的 zone 名，不认具体网卡。旁路由的同网段校验也改成按 `network.lan.netmask` 计算，不再写死 `/24`。向导页面里的网口名字取自 `network.lan.device` / `network.wan.device`，不会硬编码 `eth0/eth1`。
+
+兼容性：早期版本用的名字是 `h28k-mode` 和 `/etc/config/h28k`，现在留有 `/usr/bin/h28k-mode` 包装脚本；`netmode` 首次运行会自动把旧配置复制成 `netmode`，老脚本、老命令不用改。
+
+要加第二块板子，按这个顺序即可：拷一份 dts 与 U-Boot 补丁 → 在 `armv8.mk` 加 `Device/xxx` → 在 `board.d/01_leds`、`02_network`（含 `ipaddr`）、`40-net-smp-affinity` 加条目 → 新增一个带 `board_name` 门禁的 `uci-defaults` → 在 `config/` 里加一份 seed。`netmode` 与 LuCI 应用不用动。
 
 ## 三种模式的参数清单（含防火墙）
 
@@ -188,7 +205,7 @@ h28k-mode dhcp off               # 只关 DHCP
 
 **已知边界**
 
-- 旁路由的 `/24` 同网段校验只在 `setup bypass` 里做；掩码不是 `/24` 的场景请先用 `h28k-mode lanip` 配好 IP/掩码，再用 `h28k-mode bypass <IP>`。
+- 旁路由的 `/24` 同网段校验只在 `setup bypass` 里做；掩码不是 `/24` 的场景请先用 `netmode lanip` 配好 IP/掩码，再用 `netmode bypass <IP>`。
 - 旁路由不接管 IPv6：主路由若直接给终端发 IPv6，那部分流量会绕过本机。
 - 旁路由默认在 LAN 侧做 SNAT。想让上游看到真实客户端 IP，可执行
   `uci set firewall.@zone[0].masq='0'; uci commit firewall; /etc/init.d/firewall reload`（zone 序号以 `uci show firewall` 里 lan 那条为准），代价是回程不再经过本机。
@@ -212,7 +229,7 @@ h28k-mode dhcp off               # 只关 DHCP
 ## 验证记录（本目录已实测的部分）
 
 - `adapt.py` 在 `v25.12.2` 干净源码树上执行通过，自检 9 项全 OK，重复执行全部跳过（幂等）。
-- 调优脚本与 `h28k-mode` 装进目标后权限均为 755，`sh -n` 语法检查通过；调优脚本只对 `hinlink,h28k` 执行。
+- 调优脚本与 `netmode` 装进目标后权限均为 755，`sh -n` 语法检查通过；调优脚本只对 `hinlink,h28k` 执行。
 - `.config` 里 `CONFIG_PACKAGE_luci-app-commands=y` 被 defconfig 保留，用于承载“系统 → 自定义命令”的三个一键按钮。
 - `make defconfig` 接受 `CONFIG_TARGET_rockchip_armv8_DEVICE_hinlink_h28k=y`，设备 profile 被正确识别。
 - 内核 `prepare`（6.12.103 + ImmortalWrt 全部回移补丁）通过；H28K 设备树用与 `Image/BuildDTB` 相同的

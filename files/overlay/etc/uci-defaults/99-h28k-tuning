@@ -25,30 +25,30 @@ uci -q set network.globals='globals'
 uci -q set network.@globals[0].packet_steering='1'
 uci -q set network.@globals[0].flow_offloading='1'
 
-# 5) 主路由/旁路由模式状态（确保配置文件存在，uci 才写得进去） + 旁路由上游（供 h28k-mode 使用）
-touch /etc/config/h28k
-uci -q set h28k.mode='mode'
-uci -q set h28k.@mode[0].mode='router'
-uci -q set h28k.@mode[0].upstream='192.168.2.254'
+# 5) 主路由/旁路由模式状态（确保配置文件存在，uci 才写得进去） + 旁路由上游（供 netmode 使用）
+touch /etc/config/netmode
+uci -q set netmode.mode='mode'
+uci -q set netmode.@mode[0].mode='router'
+uci -q set netmode.@mode[0].upstream='192.168.2.254'
 
 # 6) 在 LuCI「系统 → 自定义命令」里预置三个一键按钮（luci-app-commands）
 touch /etc/config/luci
-uci -q set luci.h28k_bypass='command'
-uci -q set luci.h28k_bypass.name='① 切换为旁路由（关 DHCP，网关→192.168.2.254）'
-uci -q set luci.h28k_bypass.command='/usr/bin/h28k-mode bypass'
+uci -q set luci.netmode_bypass='command'
+uci -q set luci.netmode_bypass.name='① 切换为旁路由（关 DHCP，网关→192.168.2.254）'
+uci -q set luci.netmode_bypass.command='/usr/bin/netmode bypass'
 
-uci -q set luci.h28k_router='command'
-uci -q set luci.h28k_router.name='② 恢复主路由（开 DHCP/WAN）'
-uci -q set luci.h28k_router.command='/usr/bin/h28k-mode router'
+uci -q set luci.netmode_router='command'
+uci -q set luci.netmode_router.name='② 恢复主路由（开 DHCP/WAN）'
+uci -q set luci.netmode_router.command='/usr/bin/netmode router'
 
-uci -q set luci.h28k_status='command'
-uci -q set luci.h28k_status.name='③ 查看当前模式/网口状态（只读）'
-uci -q set luci.h28k_status.command='/usr/bin/h28k-mode status'
+uci -q set luci.netmode_status='command'
+uci -q set luci.netmode_status.name='③ 查看当前模式/网口状态（只读）'
+uci -q set luci.netmode_status.command='/usr/bin/netmode status'
 
 uci -q commit system
 uci -q commit network
 uci -q commit dhcp
-uci -q commit h28k
+uci -q commit netmode
 uci -q commit luci
 
 # 7) zram 服务默认不开机自启，这里补上并当场启动，不用等重启

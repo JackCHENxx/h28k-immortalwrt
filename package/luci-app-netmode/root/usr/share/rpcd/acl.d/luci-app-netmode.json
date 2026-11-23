@@ -1,0 +1,17 @@
+{
+	"luci-app-netmode": {
+		"description": "网络向导：执行 netmode，并读写 network / dhcp / firewall / netmode 配置",
+		"read": {
+			"file": {
+				"/usr/bin/netmode": [ "exec" ]
+			},
+			"uci": [ "network", "dhcp", "firewall", "netmode" ]
+		},
+		"write": {
+			"file": {
+				"/usr/bin/netmode": [ "exec" ]
+			},
+			"uci": [ "network", "dhcp", "netmode" ]
+		}
+	}
+}

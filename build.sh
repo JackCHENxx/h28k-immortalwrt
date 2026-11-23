@@ -84,8 +84,8 @@ cp "$KIT_DIR/config/h28k.config" "$SRC/.config"
 make -C "$SRC" defconfig
 grep -q 'CONFIG_TARGET_rockchip_armv8_DEVICE_hinlink_h28k=y' "$SRC/.config" \
 	|| { echo "配置里没有 hinlink_h28k 设备，补丁未生效" >&2; exit 1; }
-grep -q 'CONFIG_PACKAGE_luci-app-h28k-mode=y' "$SRC/.config" \
-	|| { echo "配置里没有 luci-app-h28k-mode，网络向导不会进固件" >&2; exit 1; }
+grep -q 'CONFIG_PACKAGE_luci-app-netmode=y' "$SRC/.config" \
+	|| { echo "配置里没有 luci-app-netmode，网络向导不会进固件" >&2; exit 1; }
 
 [ "$PREPARE_ONLY" = 1 ] && { log "仅准备阶段完成: $SRC"; exit 0; }
 

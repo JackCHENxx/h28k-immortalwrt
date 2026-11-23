@@ -5,34 +5,34 @@
 'require uci';
 'require ui';
 
-var SCRIPT = '/usr/bin/h28k-mode';
+var SCRIPT = '/usr/bin/netmode';
 
 var CSS = [
-	'.h28k-wizard .h28k-grid{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0}',
-	'.h28k-card{flex:1 1 210px;min-width:200px;border-radius:10px;padding:22px 18px;color:#fff;cursor:pointer;',
+	'.netmode-wizard .netmode-grid{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0}',
+	'.netmode-card{flex:1 1 210px;min-width:200px;border-radius:10px;padding:22px 18px;color:#fff;cursor:pointer;',
 	'box-shadow:0 2px 8px rgba(0,0,0,.14);transition:transform .15s ease}',
-	'.h28k-card:hover{transform:translateY(-2px)}',
-	'.h28k-card h3{margin:0 0 8px;color:#fff;font-size:17px;font-weight:600}',
-	'.h28k-card p{margin:0;color:#fff;opacity:.92;font-size:13px;line-height:1.55}',
-	'.h28k-red{background:#e15b64}.h28k-green{background:#37b37a}.h28k-blue{background:#2f80ed}',
-	'.h28k-steps{display:flex;gap:8px;margin:10px 0 22px;font-size:13px;flex-wrap:wrap}',
-	'.h28k-step{padding:4px 12px;border-radius:14px;background:#eceff3;color:#66707d}',
-	'.h28k-step.on{background:#2f80ed;color:#fff}',
-	'.h28k-note{background:#fff8e1;border-left:4px solid #f0b400;padding:10px 12px;border-radius:4px;',
+	'.netmode-card:hover{transform:translateY(-2px)}',
+	'.netmode-card h3{margin:0 0 8px;color:#fff;font-size:17px;font-weight:600}',
+	'.netmode-card p{margin:0;color:#fff;opacity:.92;font-size:13px;line-height:1.55}',
+	'.netmode-red{background:#e15b64}.netmode-green{background:#37b37a}.netmode-blue{background:#2f80ed}',
+	'.netmode-steps{display:flex;gap:8px;margin:10px 0 22px;font-size:13px;flex-wrap:wrap}',
+	'.netmode-step{padding:4px 12px;border-radius:14px;background:#eceff3;color:#66707d}',
+	'.netmode-step.on{background:#2f80ed;color:#fff}',
+	'.netmode-note{background:#fff8e1;border-left:4px solid #f0b400;padding:10px 12px;border-radius:4px;',
 	'margin:14px 0;font-size:13px;line-height:1.6}',
-	'.h28k-done{text-align:center;padding:24px 0}',
-	'.h28k-ok{font-size:46px;line-height:1;color:#37b37a;margin-bottom:10px}',
-	'.h28k-pre{background:#f6f8fa;border:1px solid #e3e8ee;border-radius:6px;padding:10px;',
+	'.netmode-done{text-align:center;padding:24px 0}',
+	'.netmode-ok{font-size:46px;line-height:1;color:#37b37a;margin-bottom:10px}',
+	'.netmode-pre{background:#f6f8fa;border:1px solid #e3e8ee;border-radius:6px;padding:10px;',
 	'margin:14px 0;white-space:pre-wrap;font-size:13px;line-height:1.6;text-align:left}',
-	'.h28k-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}'
+	'.netmode-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}'
 ].join('');
 
 var CARDS = [
-	{ kind: 'pppoe', cls: 'h28k-red', title: '宽带拨号连接',
+	{ kind: 'pppoe', cls: 'netmode-red', title: '宽带拨号连接',
 	  desc: '用宽带账号密码拨号，本机做主路由（NAT + DHCP）' },
-	{ kind: 'dhcp', cls: 'h28k-green', title: '连接现有路由器',
+	{ kind: 'dhcp', cls: 'netmode-green', title: '连接现有路由器',
 	  desc: 'WAN 口自动获取 IP，本机做主路由（NAT + DHCP）' },
-	{ kind: 'bypass', cls: 'h28k-blue', title: '配置为旁路由',
+	{ kind: 'bypass', cls: 'netmode-blue', title: '配置为旁路由',
 	  desc: '网关与 DNS 指向主路由，本机只做网关、不发 DHCP' }
 ];
 
@@ -75,7 +75,7 @@ function textInput(value, placeholder) {
 return view.extend({
 	load: function() {
 		return Promise.all([
-			uci.load('h28k'),
+			uci.load('netmode'),
 			uci.load('network'),
 			uci.load('dhcp'),
 			run([ 'status' ]).catch(function(err) { return err.message || String(err); }),
@@ -86,12 +86,16 @@ return view.extend({
 	render: function(res) {
 		this.status = res[3] || '';
 		this.detect = (res[4] || '').trim();
-		this.mode = uci.get('h28k', 'mode', 'mode') || 'router';
-		this.upstream = uci.get('h28k', 'mode', 'upstream') || this.detect || '192.168.2.254';
+		this.mode = uci.get('netmode', 'mode', 'mode') || 'router';
+		this.upstream = uci.get('netmode', 'mode', 'upstream') || this.detect || '192.168.2.254';
 		this.lanip = uci.get('network', 'lan', 'ipaddr') || '192.168.2.1';
+		this.lanDev = uci.get('network', 'lan', 'device') ||
+			uci.get('network', 'lan', 'ifname') || 'LAN';
+		this.wanDev = uci.get('network', 'wan', 'device') ||
+			uci.get('network', 'wan', 'ifname') || 'WAN';
 		this.lastOut = '';
 
-		var root = E('div', { 'class': 'cbi-map h28k-wizard' });
+		var root = E('div', { 'class': 'cbi-map netmode-wizard' });
 		this.root = root;
 		this.paint('welcome');
 
@@ -117,11 +121,11 @@ return view.extend({
 
 	stepsBar: function(active) {
 		var names = [ '1 选择联网方式', '2 填写参数', '3 完成' ];
-		var bar = E('div', { 'class': 'h28k-steps' });
+		var bar = E('div', { 'class': 'netmode-steps' });
 
 		for (var i = 0; i < names.length; i++)
 			bar.appendChild(E('span', {
-				'class': 'h28k-step' + (i + 1 == active ? ' on' : '')
+				'class': 'netmode-step' + (i + 1 == active ? ' on' : '')
 			}, _(names[i])));
 
 		return bar;
@@ -129,11 +133,11 @@ return view.extend({
 
 	viewWelcome: function() {
 		var self = this;
-		var grid = E('div', { 'class': 'h28k-grid' });
+		var grid = E('div', { 'class': 'netmode-grid' });
 
 		CARDS.forEach(function(c) {
 			grid.appendChild(E('div', {
-				'class': 'h28k-card ' + c.cls,
+				'class': 'netmode-card ' + c.cls,
 				'click': function() { self.paint('params', c.kind); }
 			}, [
 				E('h3', {}, _(c.title)),
@@ -148,10 +152,10 @@ return view.extend({
 				(self.mode == 'bypass' ? _('旁路由') : _('主路由')) +
 				'，LAN ' + self.lanip),
 			grid,
-			E('div', { 'class': 'h28k-note' },
+			E('div', { 'class': 'netmode-note' },
 				_('不确定选哪个：光猫要拨号就用「宽带拨号」；已有主路由、这台当二级路由用「连接现有路由器」；想让这台专门做网关/科学上网、由主路由发 DHCP，就用「配置为旁路由」。')),
 			E('h3', {}, _('当前状态')),
-			E('div', { 'class': 'h28k-pre' }, self.status)
+			E('div', { 'class': 'netmode-pre' }, self.status)
 		]);
 	},
 
@@ -183,7 +187,7 @@ return view.extend({
 
 			body.push(field(_('本机地址'), dIp,
 				_('本机 LAN 地址，默认 192.168.2.1。')));
-			argsHint = _('WAN 口（eth1）会从上级路由自动获取 IP，本机开 DHCP 与 NAT。上级路由的 LAN 网段不要和本机地址冲突。');
+			argsHint = _('WAN 口（') + self.wanDev + _('）会从上级路由自动获取 IP，本机开 DHCP 与 NAT。上级路由的 LAN 网段不要和本机地址冲突。');
 			self._apply = function() {
 				var ip = (dIp.value || '').trim();
 
@@ -204,7 +208,7 @@ return view.extend({
 			body.push(field(_('宽带密码'), passInput));
 			body.push(field(_('本机地址'), pIp,
 				_('本机 LAN 地址，默认 192.168.2.1。')));
-			argsHint = _('光猫桥接时选这个：WAN 口（eth1）用 PPPoE 拨号，本机开 DHCP 与 NAT。');
+			argsHint = _('光猫桥接时选这个：WAN 口（') + self.wanDev + _('）用 PPPoE 拨号，本机开 DHCP 与 NAT。');
 			self._apply = function() {
 				var u = (userInput.value || '').trim(), p = passInput.value || '';
 				var ip = (pIp.value || '').trim();
@@ -234,8 +238,8 @@ return view.extend({
 			E('div', { 'class': 'cbi-section' }, [
 				E('div', { 'class': 'cbi-section-node' }, body)
 			]),
-			E('div', { 'class': 'h28k-note' }, argsHint),
-			E('div', { 'class': 'h28k-actions' }, [ btnApply, btnBack ])
+			E('div', { 'class': 'netmode-note' }, argsHint),
+			E('div', { 'class': 'netmode-actions' }, [ btnApply, btnBack ])
 		]);
 	},
 
@@ -271,7 +275,7 @@ return view.extend({
 			next = _('下一步：在主路由的 DHCP 设置里，把下发的「网关」和「DNS」改成 ') + self.lanip +
 				_('（或只改需要走这台设备的终端）。之后终端会自动经本机出海。');
 		} else {
-			next = _('下一步：把光猫/上级设备的网线接在 WAN 口（eth1，RTL8111H 那颗），终端连 LAN 口即可上网。');
+			next = _('下一步：把光猫/上级设备的网线接在 WAN 口（') + self.wanDev + _('），终端连 LAN 口即可上网。');
 		}
 
 		var btnHome = E('a', {
@@ -287,14 +291,14 @@ return view.extend({
 		return E('div', {}, [
 			E('h2', {}, _('网络向导')),
 			self.stepsBar(3),
-			E('div', { 'class': 'h28k-done' }, [
-				E('div', { 'class': 'h28k-ok' }, '✓'),
+			E('div', { 'class': 'netmode-done' }, [
+				E('div', { 'class': 'netmode-ok' }, '✓'),
 				E('h3', {}, title),
 				E('div', { 'class': 'cbi-map-descr' }, _('本机地址：') + self.lanip)
 			]),
-			E('div', { 'class': 'h28k-pre' }, self.lastOut),
-			E('div', { 'class': 'h28k-note' }, next),
-			E('div', { 'class': 'h28k-actions' }, [ btnHome, btnAgain ])
+			E('div', { 'class': 'netmode-pre' }, self.lastOut),
+			E('div', { 'class': 'netmode-note' }, next),
+			E('div', { 'class': 'netmode-actions' }, [ btnHome, btnAgain ])
 		]);
 	}
 });
