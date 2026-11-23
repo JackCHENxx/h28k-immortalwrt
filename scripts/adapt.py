@@ -230,6 +230,8 @@ def main():
         "LED 配置": "hinlink,h28k)" in read(leds),
         "IRQ 绑核": "hinlink,h28k|\\\nradxa,e25" in read(aff),
         "内核 dts": os.path.exists(dts_dst),
+        "PCIe/USB 节点": "&pcie {" in read(dts_dst) and "&usb2phy {" in read(dts_dst),
+        "WireGuard 预置": os.access(os.path.join(target, "armv8/base-files/etc/uci-defaults/98-wireguard"), os.X_OK),
         "开机调优": os.access(tuning_dst, os.X_OK),
         "网络向导弹出": os.path.exists(os.path.join(
             pkg_dst, "htdocs/luci-static/resources/view/netmode/guide.js")),

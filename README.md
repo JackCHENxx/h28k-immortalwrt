@@ -92,6 +92,7 @@ hinlink,h28k)
 | `vm.swappiness` | 80 | 有 zram 时更积极换出冷数据；写入 `/etc/sysctl.d/90-h28k-zram.conf` |
 | `network.packet_steering` | 1 | 四核 A53 上把网卡软中断分摊到多核（ImmortalWrt 默认只对 x86/mt7621/bcm53xx 开） |
 | `network.flow_offloading` | 1 | 软件快速路径，RK3528 上做 NAT 转发才跑得满千兆 |
+| zram `mem_limit` | 1024MB | 压缩后最多占 1GB，极端不可压数据也不会把 2GB 内存吃穿 |
 | `dhcp.lan.start` / `limit` / `leasetime` | 38 / 206 / 24h | 地址池 `192.168.2.38–243`，与 EdgeRouter（EdgeOS）默认一致；同时写进 dnsmasq 默认模板，恢复出厂也是这套 |
 
 注意：`flow_offloading=1` 和 SQM/QoS 流控冲突，以后要限速，在 LuCI「网络 → 防火墙」里关掉软件流量分载即可；
@@ -139,6 +140,29 @@ netmode dhcp off               # 只关 DHCP
 2. H28K 用网线接到主路由的交换机侧，后台地址仍是 `192.168.2.1`；
 3. 向导里选「配置为旁路由」，填主路由 IP，应用；
 4. 把主路由 DHCP 下发的网关/DNS 改成 `192.168.2.1`，或只改需要走它的终端。
+
+## WireGuard（内置服务端）
+
+固件里已经带 `kmod-wireguard`、`wireguard-tools`、`luci-proto-wireguard`，第一次开机由 `98-wireguard` 预置一个**空服务端**：
+
+| 项 | 值 |
+| --- | --- |
+| 接口 / 地址 | `wg0`，`10.66.0.1/24` |
+| 监听 | UDP `51820`，MTU `1420` |
+| 私钥 | `/etc/wireguard/wg0.key`（`600`，首次开机 `wg genkey` 生成） |
+| 防火墙 | 新建 `wg` zone；`wg→lan`、`lan→wg` 两条 forwarding；WAN 放行 UDP 51820 |
+
+它只建了服务端框架，**没有任何 peer**，所以默认谁都连不进来。用法：LuCI「网络 → 接口 → wg0 → 对端」里加 peer（填对方公钥、`AllowedIPs` 如 `10.66.0.2/32`），客户端把 endpoint 指向你家公网 IP:51820。要让 VPN 客户端访问整个内网，peer 的 `AllowedIPs` 还要包含 `192.168.2.0/24`。
+
+注意两点：旁路由模式下 WAN 接口是禁用的，外网连不进来，这是预期行为；RK3528 上 WireGuard 走 ChaCha20/NEON，实测通常 200–400Mbps，跑满千兆不现实。
+
+## 刷机安全（重要）
+
+- 这个目标的 `sysupgrade.img.gz` 是**整盘镜像**，U-Boot 在 sector 64 处（`u-boot-rockchip.bin`），刷机会连同 bootloader 一起写。**刷写过程中断电可能变砖**，务必接稳电源。
+- 第一次建议先写到 **microSD 卡**上试（能否优先从 SD 启动取决于 BootROM 和现有 bootloader；不行就走 maskrom），确认能进系统、两个网口都在，再写 eMMC。eMMC 在系统里是 `/dev/mmcblk0`，SD 是 `/dev/mmcblk1`。
+- 变砖恢复靠 Rockchip maskrom + `rkdeveloptool`（USB 连接、按板子丝印进 maskrom），刷回备份或本工程镜像；刷之前先完整备份原机 eMMC。
+- 不要单独刷 U-Boot，也不要 `dd` 写 `/dev/mtdblock*`；只写 `/dev/mmcblk0` 或走 sysupgrade。
+- 板级 dts 已补齐 `&pcie`、`&usb2phy`、`&combphy`、`&gpu` 节点（PCIe 上的 RTL8111H 就是 WAN 口 `eth1`），U-Boot 补丁与 OpenWrt 主线逐字节一致。
 
 ## 通用层与设备层（方便适配别的板子）
 

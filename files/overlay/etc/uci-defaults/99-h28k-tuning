@@ -57,6 +57,8 @@ uci -q commit luci
 if [ -x /etc/init.d/zram ]; then
 	/etc/init.d/zram enable
 	/etc/init.d/zram start >/dev/null 2>&1
+	# 上限保护：zram 压缩后最多占 1GB，避免极端不可压数据把 2GB 内存吃穿
+	[ -e /sys/block/zram0/mem_limit ] && echo 1073741824 > /sys/block/zram0/mem_limit 2>/dev/null
 fi
 
 exit 0
