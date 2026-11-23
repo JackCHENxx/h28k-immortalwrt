@@ -39,7 +39,7 @@ SKIP_FEEDS=1 ./build.sh    # 复用源码树里已装好的 feeds（重跑时省
 ```
 
 要求：Linux x86_64、≥4 核、≥4GB 内存（8GB 更稳）、≥30GB 磁盘；Ubuntu 装好
-`build-essential clang flex bison gawk gettext git libncurses-dev libssl-dev python3 rsync unzip zlib1g-dev file wget cpio`。
+`build-essential clang flex bison gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools python3-pyelftools swig python3-dev rsync unzip zlib1g-dev file wget cpio`。
 源码树落在 `.build/immortalwrt`，产物收到 `out/`。
 
 想要更多插件，改 `config/h28k.config` 往里加 `CONFIG_PACKAGE_xxx=y` 即可（也可以先 `--prepare-only`，

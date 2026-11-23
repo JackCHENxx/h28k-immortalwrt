@@ -28,6 +28,13 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
+# 0. 主机依赖预检（U-Boot 的 RK3528 打包需要 pyelftools；缺了会在跑很久之后才失败）
+python3 -c 'import elftools' 2>/dev/null || {
+	echo "缺少 Python3 pyelftools：Ubuntu/Debian 请 sudo apt install python3-pyelftools，"
+	echo "或 python3 -m pip install --break-system-packages pyelftools" >&2
+	exit 1
+}
+
 log() { printf '\n\033[1;32m==> %s\033[0m\n' "$*"; }
 
 latest_tag() {
