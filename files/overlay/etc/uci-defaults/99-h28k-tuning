@@ -25,7 +25,9 @@ sysctl -qw vm.swappiness=80 2>/dev/null
 #    （若之后用 SQM/QoS 流控，请在 网络-防火墙 里关掉 flow offloading）
 uci -q set network.globals='globals'
 uci -q set network.@globals[0].packet_steering='1'
-uci -q set network.@globals[0].flow_offloading='1'
+# flow offloading 由 fw4 的 defaults 控制，不是 network.globals（fw3 时代的老键）
+uci -q set firewall.@defaults[0].flow_offloading='1'
+uci -q set firewall.@defaults[0].fullcone='1'
 
 # 5) 主路由/旁路由模式状态（确保配置文件存在，uci 才写得进去） + 旁路由上游（供 netmode 使用）
 touch /etc/config/netmode
@@ -47,6 +49,7 @@ uci -q set luci.netmode_status='command'
 uci -q set luci.netmode_status.name='③ 查看当前模式/网口状态（只读）'
 uci -q set luci.netmode_status.command='/usr/bin/netmode status'
 
+uci -q commit firewall
 uci -q commit system
 uci -q commit network
 uci -q commit dhcp

@@ -91,7 +91,7 @@ hinlink,h28k)
 | `system.zram_priority` | 100 | 高于任何磁盘 swap，冷页优先压进内存 |
 | `vm.swappiness` | 80 | 有 zram 时更积极换出冷数据；写入 `/etc/sysctl.d/90-h28k-zram.conf` |
 | `network.packet_steering` | 1 | 四核 A53 上把网卡软中断分摊到多核（ImmortalWrt 默认只对 x86/mt7621/bcm53xx 开） |
-| `network.flow_offloading` | 1 | 软件快速路径，RK3528 上做 NAT 转发才跑得满千兆 |
+| `firewall.@defaults[0].flow_offloading` | 1 | 软件快速路径（fw4），RK3528 上做 NAT 转发才跑得满千兆 |
 | zram `mem_limit` | 1024MB | 压缩后最多占 1GB，极端不可压数据也不会把 2GB 内存吃穿 |
 | `dhcp.lan.start` / `limit` / `leasetime` | 38 / 206 / 24h | 地址池 `192.168.2.38–243`，与 EdgeRouter（EdgeOS）默认一致；同时写进 dnsmasq 默认模板，恢复出厂也是这套 |
 
