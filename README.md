@@ -53,7 +53,7 @@ immortalwrt-rockchip-armv8-hinlink_h28k-squashfs-sysupgrade.img.gz
 
 这是一个自带 U-Boot 的完整卡镜像（U-Boot 落在 sector 64，32MiB 对齐），SD 卡和 eMMC 都能直接写。
 默认分区 kernel 64MB / rootfs **2GB**（8GB eMMC 留足余量，剩余空间可在 LuCI 里扩 overlay），
-LuCI 中文界面，**LAN `192.168.2.1`**（DHCP 池 192.168.2.100–249）。
+LuCI 中文界面，**LAN `192.168.2.1`**（DHCP 池 192.168.2.38–243，租期 24h，对齐 EdgeRouter/EdgeOS 默认）。
 
 ## 默认 IP 192.168.2.1 是写进固件的，不是开机脚本改的
 
@@ -92,6 +92,7 @@ hinlink,h28k)
 | `vm.swappiness` | 80 | 有 zram 时更积极换出冷数据；写入 `/etc/sysctl.d/90-h28k-zram.conf` |
 | `network.packet_steering` | 1 | 四核 A53 上把网卡软中断分摊到多核（ImmortalWrt 默认只对 x86/mt7621/bcm53xx 开） |
 | `network.flow_offloading` | 1 | 软件快速路径，RK3528 上做 NAT 转发才跑得满千兆 |
+| `dhcp.lan.start` / `limit` / `leasetime` | 38 / 206 / 24h | 地址池 `192.168.2.38–243`，与 EdgeRouter（EdgeOS）默认一致；同时写进 dnsmasq 默认模板，恢复出厂也是这套 |
 
 注意：`flow_offloading=1` 和 SQM/QoS 流控冲突，以后要限速，在 LuCI「网络 → 防火墙」里关掉软件流量分载即可；
 `system.zram_*` 改完 `/etc/init.d/zram restart` 生效，可 `zramctl` / `free -h` 核对。
@@ -198,7 +199,7 @@ netmode dhcp off               # 只关 DHCP
 
 **所有模式都不动的东西**
 
-- `network.lan.netmask` 仍为 `255.255.255.0`，DHCP 池仍 `100–150`（`192.168.2.100–249`）
+- `network.lan.netmask` 仍为 `255.255.255.0`，DHCP 池固定为 `start 38 / limit 206`（`192.168.2.38–243`），租期 `24h`
 - `firewall` 的 `defaults.input=REJECT`、`defaults.forward=REJECT` 不变，只靠 zone 的 `forward=ACCEPT` 放行 LAN
 - `dhcp.@dnsmasq[0].dns_redirect=1`：所有打到本机的 DNS 都会被导向 dnsmasq（旁路由下也一样，客户端自定义 DNS 会被接管）
 - `flow_offloading` / `packet_steering` 由开机调优脚本设置，切模式不改

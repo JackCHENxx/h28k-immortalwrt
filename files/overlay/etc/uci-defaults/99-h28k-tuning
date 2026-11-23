@@ -5,10 +5,12 @@
 [ "$(board_name)" = "hinlink,h28k" ] || exit 0
 
 # 1) 默认网段的 192.168.2.1/24 已经写进 board.json（board.d/02_network 的 ipaddr），
-#    开机由 config_generate 直接生成，这里只补 DHCP 池 100~249。
+#    开机由 config_generate 直接生成，这里只补 DHCP 池。
 #    （本脚本只在首次开机 /overlay 重置时跑；已刷过旧固件的设备升级不会重跑。）
-uci -q set dhcp.lan.start='100'
-uci -q set dhcp.lan.limit='150'
+# DHCP 池对齐 EdgeRouter (EdgeOS)：.38-.243（206 个），租期 24h
+uci -q set dhcp.lan.start='38'
+uci -q set dhcp.lan.limit='206'
+uci -q set dhcp.lan.leasetime='24h'
 
 # 2) zram：2GB 机型给 1536MB 压缩 swap。lzo-rle 是这版内核的默认压缩算法（约 2~2.5:1），
 #    zram 只是容量上限，不预占内存；priority 100 高于任何磁盘 swap。

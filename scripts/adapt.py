@@ -205,6 +205,20 @@ def main():
                  "nlnet,xiguapi-v3|\\\nhinlink,h28k|\\\nradxa,e25|\\\n",
                  "hinlink,h28k|\\\nradxa,e25|\\\n")
 
+    # 5.5 DHCP 默认池：对齐 EdgeRouter（EdgeOS 默认 .38-.243、lease 86400=24h）
+    #     直接改 dnsmasq 的默认模板，这样镜像装完就是这套值，恢复出厂也一致，
+    #     不依赖首次开机脚本；99-h28k-tuning 里再写一遍只是兜底。
+    dhcp_tpl = os.path.join(SRC, "package/network/services/dnsmasq/files/dhcp.conf")
+    tpl = read(dhcp_tpl)
+    if "\toption start \t38\n" not in tpl:
+        new = tpl.replace(
+            "\toption start \t100\n\toption limit\t150\n\toption leasetime\t12h\n",
+            "\toption start \t38\n\toption limit\t206\n\toption leasetime\t24h\n")
+        if new == tpl:
+            sys.exit("[adapt] 失败: dnsmasq 默认模板结构与预期不符（无法改 DHCP 池）")
+        write(dhcp_tpl, new)
+        note("已改 dnsmasq 默认 DHCP 池: .38-.243, 24h")
+
     # 6. 自检
     checks = {
         "设备定义": "Device/hinlink_h28k" in read(image_mk),
@@ -219,6 +233,7 @@ def main():
         "开机调优": os.access(tuning_dst, os.X_OK),
         "网络向导弹出": os.path.exists(os.path.join(
             pkg_dst, "htdocs/luci-static/resources/view/netmode/guide.js")),
+        "DHCP 池": "\toption start \t38\n" in read(dhcp_tpl) and "\toption limit\t206\n" in read(dhcp_tpl) and "\toption leasetime\t24h\n" in read(dhcp_tpl),
     }
     bad = [k for k, v in checks.items() if not v]
     print("\n[adapt] 自检: " + ", ".join("%s=%s" % (k, "OK" if v else "FAIL") for k, v in checks.items()))
