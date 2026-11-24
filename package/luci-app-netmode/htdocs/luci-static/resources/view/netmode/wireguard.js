@@ -201,8 +201,8 @@ return view.extend({
 
 			rows.push(E('tr', {}, [
 				E('td', {}, name),
-				E('td', { 'class': 'mono' }, uci.get('network', name, 'publickey') || ''),
-				E('td', { 'class': 'mono' }, uci.get('network', name, 'allowedips') || ''),
+				E('td', { 'class': 'mono' }, uci.get('network', name, 'public_key') || ''),
+				E('td', { 'class': 'mono' }, uci.get('network', name, 'allowed_ips') || ''),
 				E('td', { 'class': 'mono' }, endpoint),
 				E('td', {}, del)
 			]));

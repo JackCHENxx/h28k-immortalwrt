@@ -71,7 +71,8 @@ ensure_iface() {
 		uci set "network.$IFACE=interface"
 	fi
 	uci set "network.$IFACE.proto=wireguard"
-	uci set "network.$IFACE.privatekey=$(cat "$KEY")"
+	[ -n "$(uci -q get "network.$IFACE.private_key" || true)" ] \
+		|| uci set "network.$IFACE.private_key=$(cat "$KEY")"
 	uci set "network.$IFACE.addresses=$addr"
 	uci set "network.$IFACE.listen_port=$port"
 	uci set "network.$IFACE.mtu=$mtu"
@@ -156,12 +157,55 @@ cmd_status() {
 	echo "peers=$peers"
 }
 
+sync_private_key() {
+	local cur legacy
+	cur=$(uci -q get "network.$IFACE.private_key" || true)
+	legacy=$(uci -q get "network.$IFACE.privatekey" || true)
+	if [ -n "$cur" ]; then
+		# 以运行配置为准，保证 key 文件、UI 公钥和接口实际私钥一致
+		umask 077
+		printf '%s\n' "$cur" > "$KEY"
+		chmod 600 "$KEY"
+	elif [ -n "$legacy" ]; then
+		uci set "network.$IFACE.private_key=$legacy"
+		uci delete "network.$IFACE.privatekey" 2>/dev/null || true
+		umask 077
+		printf '%s\n' "$legacy" > "$KEY"
+		chmod 600 "$KEY"
+	else
+		uci set "network.$IFACE.private_key=$(cat "$KEY")"
+	fi
+	uci delete "network.$IFACE.privatekey" 2>/dev/null || true
+}
+
+migrate_peer() {
+	local sec=$1
+	local v
+	for pair in "publickey public_key" "allowedips allowed_ips" "presharedkey preshared_key"; do
+		old=${pair% *}; new=${pair#* }
+		v=$(uci -q get "network.$sec.$old" || true)
+		if [ -n "$v" ]; then
+			uci set "network.$sec.$new=$v"
+			uci delete "network.$sec.$old" 2>/dev/null || true
+		fi
+	done
+}
+
+migrate_peers() {
+	local sec
+	for sec in $(uci show network 2>/dev/null | sed -n 's/^network\.\([^.]*\)=wireguard_wg0$/\1/p'); do
+		migrate_peer "$sec"
+	done
+}
+
 cmd_init() {
 	ensure_key || die "无法生成私钥（wireguard-tools 是否已安装？）"
 	if uci -q get "network.$IFACE" >/dev/null 2>&1; then
+		sync_private_key
+		migrate_peers
 		ensure_firewall "$(uci -q get firewall.allow_wg.dest_port || echo "$DEFAULT_PORT")"
 		commit
-		log "wg0 已存在，保持现有配置"
+		log "wg0 已存在，保持现有配置（已同步 private_key/对端键名）"
 		echo "exists"
 		return 0
 	fi
@@ -194,6 +238,7 @@ cmd_apply() {
 	case "$enabled" in 0|1) ;; *) die "--enabled 只能是 0 或 1" ;; esac
 
 	ensure_key || die "读取私钥失败"
+	sync_private_key
 	ensure_iface "$addr" "$port" "$mtu"
 	uci set "network.$IFACE.auto=$enabled"
 	ensure_firewall "$port"
@@ -215,7 +260,7 @@ cmd_keygen() {
 	umask 077
 	wg genkey > "$KEY" || die "生成私钥失败"
 	chmod 600 "$KEY"
-	uci set "network.$IFACE.privatekey=$(cat "$KEY")"
+	uci set "network.$IFACE.private_key=$(cat "$KEY")"
 	uci commit network
 	reload_iface
 	echo "新公钥: $(pubkey)"
@@ -228,12 +273,12 @@ peer_add_core() {
 	sec=$(peer_section "$name")
 	peer_exists "$sec" && die "对端 $name 已存在"
 	uci set "network.$sec=wireguard_wg0"
-	uci set "network.$sec.publickey=$pub"
-	uci set "network.$sec.allowedips=$allowed"
+	uci set "network.$sec.public_key=$pub"
+	uci set "network.$sec.allowed_ips=$allowed"
 	[ -n "$endpoint" ] && uci set "network.$sec.endpoint_host=$endpoint"
 	[ -n "$eport" ] && uci set "network.$sec.endpoint_port=$eport"
 	[ -n "$keepalive" ] && uci set "network.$sec.persistent_keepalive=$keepalive"
-	[ -n "$psk" ] && uci set "network.$sec.presharedkey=$psk"
+	[ -n "$psk" ] && uci set "network.$sec.preshared_key=$psk"
 	uci commit network
 	echo "$sec"
 }
@@ -262,7 +307,7 @@ cmd_peer_add() {
 	[ -z "$keepalive" ] || { case "$keepalive" in *[!0-9]*) die "keepalive 必须是秒数" ;; esac; }
 	[ -z "$psk" ] || is_wgkey "$psk" || die "预共享密钥格式不对"
 
-	existing=$(uci show network 2>/dev/null | awk -F"'" '/\.publickey=/{print $2}')
+	existing=$(uci show network 2>/dev/null | awk -F"'" '/\.(public_key|publickey)=/{print $2}')
 	if echo "$existing" | grep -qx "$pub"; then
 		die "这个公钥已经存在"
 	fi

@@ -301,7 +301,8 @@ def main():
         "PCIe/USB 节点": "&pcie {" in read(dts_dst) and "&usb2phy {" in read(dts_dst),
         "WireGuard 预置": os.access(os.path.join(target, "armv8/base-files/etc/uci-defaults/98-wireguard"), os.X_OK),
         "WireGuard 后台": os.access(os.path.join(target, "armv8/base-files/usr/bin/wgctl"), os.X_OK)
-                          and "DEFAULT_ADDR=10.0.0.1/24" in read(os.path.join(target, "armv8/base-files/usr/bin/wgctl")),
+                          and all(x in read(os.path.join(target, "armv8/base-files/usr/bin/wgctl"))
+                                  for x in ("DEFAULT_ADDR=10.0.0.1/24", "private_key", "public_key", "allowed_ips")),
         "开机调优": os.access(tuning_dst, os.X_OK),
         "网络向导弹出": os.path.exists(os.path.join(pkg_dst, "htdocs/luci-static/resources/view/netmode/guide.js")),
         "WireGuard 界面": os.path.exists(os.path.join(pkg_dst, "htdocs/luci-static/resources/view/netmode/wireguard.js")),

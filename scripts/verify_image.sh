@@ -64,6 +64,8 @@ grep -q "DEFAULT_ADDR=10.0.0.1/24" "$WORK/wgctl.txt" \
 	|| fail "WireGuard 默认地址不是 10.0.0.1/24"
 grep -q "firewall.wg_wan" "$WORK/wgctl.txt" \
 	|| fail "WireGuard 缺 wg→wan 转发，客户端无法上网"
+grep -q "private_key" "$WORK/wgctl.txt" && grep -q "public_key" "$WORK/wgctl.txt" \
+	|| fail "WireGuard 后端使用了错误的 UCI 键名"
 debugfs -R "stat /www/luci-static/resources/view/netmode/wireguard.js" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
 	|| fail "缺 WireGuard 设置页面"
 ok "默认 IP、DHCP 池、WireGuard、wgctl、设置页面均在镜像内"
