@@ -64,11 +64,11 @@ jobs:
         run: ./scripts/verify_image.sh out/*-ext4-sysupgrade.img.gz
 
       - uses: actions/upload-artifact@v4
-        if: success()
+        if: always()
         with:
           name: immortalwrt-h28k
           path: out/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
 
       - name: 发布 Release

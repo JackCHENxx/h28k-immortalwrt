@@ -47,8 +47,16 @@ debugfs -R "cat /etc/board.d/02_network" "$WORK/rootfs.ext4" 2>/dev/null > "$WOR
 grep -q 'ipaddr "192.168.2.1"' "$WORK/net.txt" || fail "board.d 里没有 192.168.2.1"
 grep -q 'device "eth1"' "$WORK/net.txt" || fail "board.d 里没有 eth1（WAN 口会消失）"
 debugfs -R "cat /etc/config/dhcp" "$WORK/rootfs.ext4" 2>/dev/null > "$WORK/dhcp.txt" || true
-grep -q "option start 	38" "$WORK/dhcp.txt" || fail "DHCP 池默认值不对"
-grep -q "option limit	206" "$WORK/dhcp.txt" || fail "DHCP 池 limit 不对"
+dhcp_check() {
+	local key=$1 want=$2
+	grep -Eq "^[[:space:]]*option[[:space:]]+$key[[:space:]]+$want[[:space:]]*$" "$WORK/dhcp.txt" && return 0
+	echo "[verify] /etc/config/dhcp 实际内容（节选）：" >&2
+	grep -n "config dhcp lan" -A12 "$WORK/dhcp.txt" >&2 || true
+	return 1
+}
+dhcp_check start 38 || fail "DHCP 池默认值不对"
+dhcp_check limit 206 || fail "DHCP 池 limit 不对"
+dhcp_check leasetime 24h || fail "DHCP 池租期不是 24h"
 debugfs -R "cat /lib/apk/db/installed" "$WORK/rootfs.ext4" 2>/dev/null > "$WORK/pkgs.txt" || true
 for pkg in kmod-wireguard wireguard-tools luci-proto-wireguard luci-app-netmode; do
 	grep -q "^P:$pkg$" "$WORK/pkgs.txt" || fail "缺包 $pkg"
