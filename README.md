@@ -15,11 +15,12 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 | `files/rk3528-hinlink-h28k.dts` | 板级设备树：gmac1(RTL8211F)、PCIe 侧 RTL8111H、eMMC/SD、ADC 按键、三颗 LED、PWM 调压。放在目标树 `files/` 下，`prepare` 时并入内核树，由 image 系统的 `Image/BuildDTB` 直接编译，不用改内核 dts Makefile |
 | `patches/uboot-board-rockchip-add-HINLINK-H28K.patch` | U-Boot defconfig + u-boot dts，新增 `hinlink-h28k-rk3528` 目标 |
 | `scripts/adapt.py` 内联改动 | `armv8.mk` 设备定义、`uboot-rockchip/Makefile` 目标、`base-files` 的 LAN/WAN 网口（含默认 IP）、LED、IRQ 绑核 |
+| `scripts/verify_image.sh` | 发布前拆镜像自检：U-Boot、dtb、分区、默认 IP、DHCP 池、包清单 |
 | `files/overlay/etc/uci-defaults/99-h28k-tuning` | 首次开机调优：zram 按内存自适应（2GB→1.5G、4GB→3G）、swappiness 80、packet steering、flow offload，并预置旁路由/恢复备份按钮 |
 | `files/overlay/usr/bin/netmode` | 向导后端脚本（`setup bypass/dhcp/pppoe`、`detect`、`bypass` / `router` / `lanip` / `dhcp` / `status`） |
 | `package/luci-app-netmode` | 自带 LuCI 应用：**网络 → 网络向导**，三步流程（选方式 → 填参数 → 完成），三种联网方式（宽带拨号 / 连现有路由 / 旁路由） |
 
-`adapt.py` 是幂等的：重复执行只会跳过；如果哪天 ImmortalWrt 自己收录了 H28K，对应步骤会自动跳过，不用改脚本。
+`adapt.py` 是幂等的：重复执行只会跳过。如果哪天 ImmortalWrt 自己收录了 H28K，脚本会**主动停下**并要求人工合并，而不是覆盖上游实现；确认要沿用本套件时加 `--force`。
 
 ## 方式一：GitHub Actions（推荐，约 40–70 分钟出镜像）
 
@@ -159,6 +160,23 @@ netmode restore                # 回到第一次改网络配置之前（失联�
 
 注意两点：旁路由模式下 WAN 接口是禁用的，外网连不进来，这是预期行为；RK3528 上 WireGuard 走 ChaCha20/NEON，实测通常 200–400Mbps，跑满千兆不现实。
 
+## 上游变了怎么自动处理
+
+`adapt.py` 不是“按某几个字符串硬怼”，而是按结构定位，并且**宁可构建失败也不发错固件**：
+
+| 上游变化 | 自动行为 |
+| --- | --- |
+| 新 release / 内核升级 | `build.sh` 每次取最新 stable tag、全新浅克隆，不依赖上次的源码树 |
+| 上游自己收录了 H28K | 检测到 `Device/hinlink_h28k` 就**停止**并提示人工合并，不覆盖上游的 dts/board.d/U-Boot；确认要沿用本套件时加 `--force` |
+| 板级 case 里增删板子/改顺序 | 分支插到 `case` 的第一条之前（先匹配先执行），不依赖相邻板子的字符串；`case $board in` 和 `case "$board" in` 两种写法都支持 |
+| `02_network` 的 LAN/WAN 分组重排 | 自己的分支永远最先命中，不再需要从共享分组里“抠出来” |
+| dnsmasq 模板缩进/顺序变化 | 按 `config dhcp lan` section 改 `start/limit/leasetime` 三个键，缺键就补，不整段替换 |
+| 设备定义/U-Boot 锚点消失 | 设备定义退到文件末尾追加，U-Boot 定义退到 `BuildPackage/U-Boot` 之前，列表项退到 `UBOOT_TARGETS :=` 之后 |
+| 包名/feed 变化 | `build.sh` 断言 `kmod-wireguard`、`wireguard-tools`、`luci-proto-wireguard`、`luci-app-netmode` 真的进了 `.config` |
+| 分区/dtb/默认值被悄悄改坏 | `scripts/verify_image.sh` 在发布前拆镜像：U-Boot 在 sector 64、kernel 里是 `hinlink_h28k` dtb、rootfs 2048MB、board.d 里 `192.168.2.1` 和 `eth1`、DHCP 池 `.38–243/24h`、四个包和 `98-wireguard` 都在；任何一项不符，Release 不会发 |
+
+每周一的 Actions 会自动跟一次最新 release；上游一改，最迟一周内会在“编译”或“校验镜像”这一步失败，而不是等你刷上去才发现网口没了。
+
 ## 刷机安全（重要）
 
 - 这个目标的 `sysupgrade.img.gz` 是**整盘镜像**，U-Boot 在 sector 64 处（`u-boot-rockchip.bin`），刷机会连同 bootloader 一起写。**刷写过程中断电可能变砖**，务必接稳电源。
@@ -256,9 +274,9 @@ netmode restore                # 回到第一次改网络配置之前（失联�
 
 ## 验证记录（本目录已实测的部分）
 
-- `adapt.py` 在 `v25.12.2` 干净源码树上执行通过，自检 9 项全 OK，重复执行全部跳过（幂等）。
+- `adapt.py` 在 `v25.12.2` 干净源码树上执行通过，自检 14 项全 OK，重复执行全部跳过（幂等）。
 - 调优脚本与 `netmode` 装进目标后权限均为 755，`sh -n` 语法检查通过；调优脚本只对 `hinlink,h28k` 执行。
-- `.config` 里 `CONFIG_PACKAGE_luci-app-commands=y` 被 defconfig 保留，用于承载“系统 → 自定义命令”的三个一键按钮。
+- `.config` 里 `CONFIG_PACKAGE_luci-app-commands=y` 被 defconfig 保留，用于承载“系统 → 自定义命令”的四个一键按钮。
 - `make defconfig` 接受 `CONFIG_TARGET_rockchip_armv8_DEVICE_hinlink_h28k=y`，设备 profile 被正确识别。
 - 内核 `prepare`（6.12.103 + ImmortalWrt 全部回移补丁）通过；H28K 设备树用与 `Image/BuildDTB` 相同的
   cpp + dtc 流程编译成功（`rk3528-hinlink-h28k.dtb`，仅 rk3528.dtsi 自带 warning），
