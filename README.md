@@ -48,7 +48,7 @@ VARIANT=experience CONFIG_SEED=config/h28k-experience.config ./build.sh  # 全�
 固件有两个 seed：
 
 - `config/h28k.config`：官方 ImmortalWrt 默认集 + 本项目的 WireGuard/网络向导，适合长期稳定使用。
-- `config/h28k-experience.config`：在默认集上追加 Argon 主题、Samba/autosamba、磁盘/文件管理、DLNA、UPnP、DDNS、WOL、SQM、mwan3、流量统计、frp、Tailscale、ZeroTier、Aria2、Transmission、Docker/Dockerman、OpenClash，适合先体验 ImmortalWrt 的完整插件生态。
+- `config/h28k-experience.config`：在默认集上追加 Argon 主题、Samba/autosamba、磁盘/文件管理、DLNA、UPnP、DDNS、WOL、SQM、mwan3、流量统计、frp、Tailscale、Docker/Dockerman、OpenClash，适合先体验 ImmortalWrt 的常用插件生态。
   其中 OpenClash 默认 `enable=0`，只有手动启用才接管 nftables；首次开机脚本和每次开机的 `S18openclash-firewall-guard` 都会在未启用时清理它无条件写入的 `firewall.openclash` include，避免影响 fw4/WireGuard。PassWall/HomeProxy 与 OpenClash 互斥，未预装。
 
 要求：Linux x86_64、≥4 核、≥4GB 内存（8GB 更稳）、≥30GB 磁盘；Ubuntu 装好
@@ -211,7 +211,7 @@ wgctl client-conf --name=phone --ip=10.0.0.2 --endpoint=<公网IP或域名> --po
 - 板级 dts 已补齐 `&pcie`、`&usb2phy`、`&combphy`、`&gpu` 节点（PCIe 上的 RTL8111H 就是 WAN 口 `eth1`），U-Boot 补丁与 OpenWrt 主线逐字节一致。
 - 固件沿用官方默认的 **root 空密码**：刷完第一次进 LuCI 就设置密码，别把管理面直接暴露在不可信网络。
 - WireGuard 首次开机会生成 `wg0` 并在 WAN 放行 UDP 51820；不需要时执行 `wgctl apply --enabled=0`，并删除 `firewall.allow_wg`。添加 peer 等于授予其访问整个 LAN 的权限，按需收紧 `wg` zone 的 input/forward。
-- 体验版预装的服务（Docker、Samba、UPnP、frp、Tailscale、ZeroTier、Aria2、Transmission、DLNA）不会替你决定用途；不用就在 LuCI 停用，尤其不要把 UPnP 和 Samba 暴露到公网。
+- 体验版预装的服务（Docker、Samba、UPnP、frp、Tailscale、DLNA）不会替你决定用途；不用就在 LuCI 停用，尤其不要把 UPnP 和 Samba 暴露到公网。
 
 ## 通用层与设备层（方便适配别的板子）
 

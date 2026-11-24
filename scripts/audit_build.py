@@ -57,8 +57,8 @@ experience_required = {
     "autosamba", "luci-app-samba4", "luci-app-diskman", "luci-app-filemanager", "luci-app-minidlna",
     "luci-app-upnp", "luci-app-ddns", "luci-app-wol", "luci-app-sqm", "luci-app-mwan3",
     "luci-app-nlbwmon", "luci-app-vnstat2", "luci-app-statistics",
-    "luci-app-frpc", "luci-app-frps", "luci-app-tailscale-community", "luci-app-zerotier",
-    "luci-app-aria2", "luci-app-transmission", "luci-app-dockerman",
+    "luci-app-frpc", "luci-app-frps", "luci-app-tailscale-community",
+    "luci-app-dockerman",
     "luci-app-openclash",
 }
 forbidden_any = {"luci-app-passwall", "luci-app-homeproxy"}  # 与 OpenClash 互斥
