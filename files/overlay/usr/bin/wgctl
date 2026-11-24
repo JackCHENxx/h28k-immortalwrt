@@ -89,6 +89,7 @@ ensure_firewall() {
 		uci set firewall.wg.forward=ACCEPT
 	fi
 	uci set firewall.wg.masq=1
+	uci set firewall.wg.mtu_fix=1
 	uci -q get firewall.wg.network | grep -qx "$IFACE" || uci add_list firewall.wg.network="$IFACE"
 	if ! uci -q get firewall.wg_lan >/dev/null 2>&1; then
 		uci set firewall.wg_lan=forwarding
@@ -203,7 +204,10 @@ cmd_init() {
 	if uci -q get "network.$IFACE" >/dev/null 2>&1; then
 		sync_private_key
 		migrate_peers
-		ensure_firewall "$(uci -q get firewall.allow_wg.dest_port || echo "$DEFAULT_PORT")"
+		local fwport
+		fwport=$(uci -q get firewall.allow_wg.dest_port 2>/dev/null || true)
+		[ -n "$fwport" ] || fwport=$DEFAULT_PORT
+		ensure_firewall "$fwport"
 		commit
 		log "wg0 已存在，保持现有配置（已同步 private_key/对端键名）"
 		echo "exists"

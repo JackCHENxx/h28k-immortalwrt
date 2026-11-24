@@ -46,8 +46,8 @@ VARIANT=experience CONFIG_SEED=config/h28k-experience.config ./build.sh  # 全�
 固件有两个 seed：
 
 - `config/h28k.config`：官方 ImmortalWrt 默认集 + 本项目的 WireGuard/网络向导，适合长期稳定使用。
-- `config/h28k-experience.config`：在默认集上追加 Argon 主题、Samba/autosamba、磁盘/文件管理、DLNA、UPnP、DDNS、WOL、SQM、mwan3、流量统计、frp、Tailscale、ZeroTier、Aria2、Transmission、Docker/Dockerman，适合先体验 ImmortalWrt 的完整插件生态。
-  代理类插件（OpenClash/PassWall/HomeProxy）彼此冲突且体积大，未预装；需要时在软件包页面单独选一个安装。
+- `config/h28k-experience.config`：在默认集上追加 Argon 主题、Samba/autosamba、磁盘/文件管理、DLNA、UPnP、DDNS、WOL、SQM、mwan3、流量统计、frp、Tailscale、ZeroTier、Aria2、Transmission、Docker/Dockerman、OpenClash，适合先体验 ImmortalWrt 的完整插件生态。
+  其中 OpenClash 默认 `enable=0`，只有手动启用才接管 nftables；首次开机脚本会清理它无条件写入的 `firewall.openclash` include，避免 OpenClash 未启用时影响 fw4/WireGuard。PassWall/HomeProxy 与 OpenClash 互斥，未预装。
 
 要求：Linux x86_64、≥4 核、≥4GB 内存（8GB 更稳）、≥30GB 磁盘；Ubuntu 装好
 `build-essential clang flex bison gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools python3-pyelftools swig python3-dev rsync unzip zlib1g-dev file wget cpio`。

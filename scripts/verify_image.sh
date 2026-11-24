@@ -87,6 +87,13 @@ if [ "${EXPECT_ARGON:-0}" = 1 ]; then
 	debugfs -R "stat /etc/uci-defaults/30_luci-theme-argon" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
 		|| fail "缺 Argon 默认主题脚本（登录页仍是 bootstrap）"
 fi
+if [ "${EXPECT_OPENCLASH:-0}" = 1 ]; then
+	debugfs -R "cat /etc/config/openclash" "$WORK/rootfs.ext4" 2>/dev/null > "$WORK/openclash.txt" || true
+	grep -Eq "^[[:space:]]*option[[:space:]]+enable[[:space:]]+'0'" "$WORK/openclash.txt" \
+		|| fail "OpenClash 默认不是关闭状态（开机会改防火墙）"
+	debugfs -R "stat /etc/uci-defaults/99-openclash-firewall-guard" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
+		|| fail "缺 OpenClash 防火墙 include 清理脚本"
+fi
 ok "默认 IP、DHCP 池、WireGuard、wgctl、设置页面均在镜像内"
 
 echo "[verify] 全部通过: $IMG"

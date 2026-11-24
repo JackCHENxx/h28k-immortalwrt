@@ -95,6 +95,9 @@ for pkg in kmod-wireguard wireguard-tools luci-proto-wireguard; do
 		|| { echo "配置里没有 ${pkg}，WireGuard 不会进固件" >&2; exit 1; }
 done
 
+log "静态审计（配置/防火墙/OpenClash 默认状态）"
+python3 "$KIT_DIR/scripts/audit_build.py" "$SRC" "$CONFIG_SEED" "$VARIANT"
+
 [ "$PREPARE_ONLY" = 1 ] && { log "仅准备阶段完成: $SRC"; exit 0; }
 
 # 5. 编译

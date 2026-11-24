@@ -1,0 +1,11 @@
+#!/bin/sh
+# OpenClash 的 luci-openclash 首次开机脚本会无条件写入：
+#   firewall.openclash = include /var/etc/openclash.include
+# 但 OpenClash 默认 enable=0，此时 include 目标不存在，fw4 重载会产生空链/报错。
+# 默认关闭时清掉该 include；用户真正启用 OpenClash 时，其 init 脚本会自行加回。
+if [ "$(uci -q get openclash.config.enable 2>/dev/null || echo 0)" = "1" ]; then
+	exit 0
+fi
+uci -q delete firewall.openclash
+uci -q commit firewall
+exit 0
