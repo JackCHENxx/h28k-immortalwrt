@@ -14,6 +14,10 @@ on:
           - default
           - experience
         default: default
+      force:
+        description: "即使上游/仓库指纹未变化也强制重新编译"
+        type: boolean
+        default: false
   schedule:
     - cron: "0 20 * * 0"   # 每周一 04:00 (UTC+8) 自动跟一次最新 release
 
@@ -25,7 +29,114 @@ permissions:
   contents: write
 
 jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      tag: ${{ steps.check.outputs.tag }}
+      variant: ${{ steps.check.outputs.variant }}
+      release: ${{ steps.check.outputs.release }}
+      fingerprint: ${{ steps.check.outputs.fingerprint }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查上游/仓库指纹，判断是否需要编译
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+          VARIANT_INPUT: ${{ inputs.variant || 'default' }}
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          REPO_URL="https://github.com/immortalwrt/immortalwrt.git"
+
+          case "$VARIANT_INPUT" in
+            default|experience) ;;
+            *) echo "非法 variant: $VARIANT_INPUT" >&2; exit 1 ;;
+          esac
+
+          TAG="${INPUT_TAG:-}"
+          if [ -n "$TAG" ]; then
+            printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              || { echo "非法 release tag: $TAG" >&2; exit 1; }
+          else
+            for _ in 1 2 3; do
+              TAG="$(git ls-remote --tags --refs "$REPO_URL" 'v*' 2>/dev/null \
+                | awk '{print $2}' | sed 's#refs/tags/##' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+              [ -n "$TAG" ] && break
+              sleep 5
+            done
+            [ -n "$TAG" ] || { echo "取不到 ImmortalWrt 最新 stable tag" >&2; exit 1; }
+          fi
+
+          if [ "$VARIANT_INPUT" = "experience" ]; then
+            CONFIG_SEED="config/h28k-experience.config"
+            RELEASE="h28k-experience"
+          else
+            CONFIG_SEED="config/h28k.config"
+            RELEASE="h28k-latest"
+          fi
+          if [ -n "${INPUT_TAG:-}" ]; then
+            RELEASE="$INPUT_TAG"
+          fi
+          [ -f "$CONFIG_SEED" ] || { echo "配置种子不存在: $CONFIG_SEED" >&2; exit 1; }
+
+          FINGERPRINT="$(python3 scripts/fingerprint.py \
+            --tag "$TAG" --variant "$VARIANT_INPUT" --config "$CONFIG_SEED")"
+
+          PREV=""
+          PREV_DIR="$RUNNER_TEMP/prev-build-info"
+          rm -rf "$PREV_DIR"
+          mkdir -p "$PREV_DIR"
+          if gh release view "$RELEASE" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download "$RELEASE" -R "$GITHUB_REPOSITORY" \
+              -p build-info.txt -D "$PREV_DIR" --clobber >/dev/null 2>&1 || true
+          fi
+          if [ -f "$PREV_DIR/build-info.txt" ]; then
+            PREV="$(sed -n 's/^fingerprint: //p' "$PREV_DIR/build-info.txt" | head -n1 || true)"
+          fi
+
+          SHOULD_BUILD=true
+          REASON="上游 tag、feeds 锁定 commit、本仓库 commit 或配置有变化"
+          if [ "$FORCE" = "true" ]; then
+            REASON="手动强制重建"
+          elif [ -z "$PREV" ]; then
+            REASON="没有可用的历史 fingerprint（首次启用或旧 Release 无指纹）"
+          elif [ "$PREV" = "$FINGERPRINT" ]; then
+            SHOULD_BUILD=false
+            REASON="上游 tag、feeds 锁定 commit、本仓库 commit 和配置均未变化"
+          fi
+
+          echo "upstream=$TAG variant=$VARIANT_INPUT release=$RELEASE"
+          echo "fingerprint=$FINGERPRINT"
+          echo "previous=${PREV:-none}"
+          echo "should_build=$SHOULD_BUILD reason=$REASON"
+
+          {
+            echo "should_build=$SHOULD_BUILD"
+            echo "tag=$TAG"
+            echo "variant=$VARIANT_INPUT"
+            echo "release=$RELEASE"
+            echo "fingerprint=$FINGERPRINT"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$SHOULD_BUILD" = "false" ]; then
+            {
+              echo "### 跳过构建"
+              echo ""
+              echo "- 上游 release：\`$TAG\`"
+              echo "- variant：\`$VARIANT_INPUT\`"
+              echo "- 指纹：\`$FINGERPRINT\`"
+              echo "- 原因：$REASON"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   build:
+    needs: preflight
+    if: needs.preflight.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -53,10 +164,11 @@ jobs:
 
       - name: 编译固件
         env:
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ needs.preflight.outputs.tag }}
           JOBS: 4
-          VARIANT: ${{ inputs.variant || 'default' }}
-          CONFIG_SEED: ${{ inputs.variant == 'experience' && 'config/h28k-experience.config' || 'config/h28k.config' }}
+          VARIANT: ${{ needs.preflight.outputs.variant }}
+          CONFIG_SEED: ${{ needs.preflight.outputs.variant == 'experience' && 'config/h28k-experience.config' || 'config/h28k.config' }}
+          FINGERPRINT: ${{ needs.preflight.outputs.fingerprint }}
         run: ./build.sh
 
       - name: 生成摘要
@@ -71,9 +183,9 @@ jobs:
 
       - name: 校验镜像
         env:
-          EXPECT_EXTRA: ${{ inputs.variant == 'experience' && 'luci-theme-argon luci-app-argon-config autosamba luci-app-samba4 luci-app-diskman luci-app-filemanager luci-app-dockerman luci-app-openclash' || '' }}
-          EXPECT_ARGON: ${{ inputs.variant == 'experience' && '1' || '0' }}
-          EXPECT_OPENCLASH: ${{ inputs.variant == 'experience' && '1' || '0' }}
+          EXPECT_EXTRA: ${{ needs.preflight.outputs.variant == 'experience' && 'luci-theme-argon luci-app-argon-config autosamba luci-app-samba4 luci-app-diskman luci-app-filemanager luci-app-dockerman luci-app-openclash' || '' }}
+          EXPECT_ARGON: ${{ needs.preflight.outputs.variant == 'experience' && '1' || '0' }}
+          EXPECT_OPENCLASH: ${{ needs.preflight.outputs.variant == 'experience' && '1' || '0' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -87,7 +199,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: immortalwrt-h28k-${{ inputs.variant || 'default' }}
+          name: immortalwrt-h28k-${{ needs.preflight.outputs.variant }}
           path: out/
           if-no-files-found: warn
           retention-days: 30
@@ -96,23 +208,22 @@ jobs:
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_TAG: ${{ inputs.tag }}
-          VARIANT: ${{ inputs.variant || 'default' }}
+          REL: ${{ needs.preflight.outputs.release }}
+          UPSTREAM_TAG: ${{ needs.preflight.outputs.tag }}
+          VARIANT: ${{ needs.preflight.outputs.variant }}
+          FINGERPRINT: ${{ needs.preflight.outputs.fingerprint }}
         run: |
           set -euo pipefail
           case "$VARIANT" in
             default|experience) ;;
             *) echo "非法 variant: $VARIANT" >&2; exit 1 ;;
           esac
-          REL="${INPUT_TAG:-}"
-          if [ -n "$REL" ] && ! printf '%s' "$REL" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "非法 release tag: $REL" >&2; exit 1
+          printf '%s' "$REL" | grep -Eq '^(h28k-latest|h28k-experience|v[0-9]+\.[0-9]+\.[0-9]+)$' \
+            || { echo "非法 release: $REL" >&2; exit 1; }
+          if ! gh release view "$REL" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$REL" -R "$GITHUB_REPOSITORY" \
+              --title "ImmortalWrt H28K ${REL}" \
+              --notes "自动构建（$(date -u +%Y-%m-%d)），设备 HINLINK H28K / RK3528，variant=${VARIANT}，上游 ${UPSTREAM_TAG}，fingerprint ${FINGERPRINT:0:12}"
           fi
-          if [ -z "$REL" ]; then
-            if [ "$VARIANT" = "experience" ]; then REL="h28k-experience"; else REL="h28k-latest"; fi
-          fi
-          if ! gh release view "$REL" >/dev/null 2>&1; then
-            gh release create "$REL" --title "ImmortalWrt H28K ${REL}" \
-              --notes "自动构建（$(date -u +%Y-%m-%d)），设备 HINLINK H28K / RK3528，variant=${VARIANT}"
-          fi
-          gh release upload "$REL" out/*.gz out/sha256sums.txt out/build-info.txt --clobber
+          gh release upload "$REL" -R "$GITHUB_REPOSITORY" \
+            out/*.gz out/sha256sums.txt out/build-info.txt --clobber

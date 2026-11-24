@@ -32,6 +32,8 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 3. 跑完在 Artifacts 下拿 `immortalwrt-h28k`；同时会自动发一个 Release（指定 tag 就发到该 tag，否则更新 `h28k-latest`），Releases 页可直接下载，不用登录 Actions。
    工作流默认每周一自动跟一次最新 release。
 
+每次编译前先跑一个 **preflight 指纹检查**：记录上游 tag、`feeds.conf.default` 里锁定的 5 个 feed commit、本仓库 commit 和配置种子哈希。定时任务如果发现指纹与 Release 里 `build-info.txt` 完全一致，就直接跳过编译，不消耗编译时间；上游或本仓库有变化才重建。需要强制重刷同一版本时，手动触发并勾选 `force`。
+
 ## 方式二：本机/服务器编译
 
 ```bash
@@ -198,7 +200,7 @@ wgctl client-conf --name=phone --ip=10.0.0.2 --endpoint=<公网IP或域名> --po
 | 包名/feed 变化 | `build.sh` 断言 `kmod-wireguard`、`wireguard-tools`、`luci-proto-wireguard`、`luci-app-netmode` 真的进了 `.config` |
 | 分区/dtb/默认值被悄悄改坏 | `scripts/verify_image.sh` 在发布前拆镜像：U-Boot 在 sector 64、kernel 里是 `hinlink_h28k` dtb、rootfs 2048MB、board.d 里 `192.168.2.1` 和 `eth1`、DHCP 池 `.38–243/24h`、四个包和 `98-wireguard` 都在；任何一项不符，Release 不会发 |
 
-每周一的 Actions 会自动跟一次最新 release；上游一改，最迟一周内会在“编译”或“校验镜像”这一步失败，而不是等你刷上去才发现网口没了。
+每周一的 Actions 会先比对构建指纹；上游 release、feed 锁定 commit、本仓库 commit 和配置都没变时直接跳过，不重复编译。上游一改，最迟一周内会重新编译，并在“编译”或“校验镜像”这一步失败，而不是等你刷上去才发现网口没了。
 
 ## 刷机安全（重要）
 

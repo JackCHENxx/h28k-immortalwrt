@@ -17,6 +17,7 @@ SRC="${SRC:-$KIT_DIR/.build/immortalwrt}"
 OUT="${OUT:-$KIT_DIR/out}"
 CONFIG_SEED="${CONFIG_SEED:-$KIT_DIR/config/h28k.config}"
 VARIANT="${VARIANT:-default}"
+FINGERPRINT="${FINGERPRINT:-}"
 case "$CONFIG_SEED" in /*) ;; *) CONFIG_SEED="$KIT_DIR/$CONFIG_SEED" ;; esac
 PREPARE_ONLY=0
 
@@ -52,6 +53,20 @@ printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' \
 	|| { echo "非法 release tag: $TAG（应为 vX.Y.Z）" >&2; exit 1; }
 log "ImmortalWrt release: $TAG (variant=$VARIANT)"
 [ -f "$CONFIG_SEED" ] || { echo "配置种子不存在: $CONFIG_SEED" >&2; exit 1; }
+
+# 0.1 构建指纹：上游 tag + feeds 锁定 commit + 本仓库 commit + 配置哈希。
+# workflow 预先算过一次；这里按同样算法复算，防止预检与真正编译的输入漂移。
+FP_INFO="$(mktemp)"
+trap 'rm -f "$FP_INFO"' EXIT
+FINGERPRINT_CALC="$(python3 "$KIT_DIR/scripts/fingerprint.py" \
+	--tag "$TAG" --variant "$VARIANT" --config "$CONFIG_SEED" --info "$FP_INFO")"
+if [ -n "$FINGERPRINT" ] && [ "$FINGERPRINT" != "$FINGERPRINT_CALC" ]; then
+	echo "构建指纹不一致：预检=$FINGERPRINT 当前=$FINGERPRINT_CALC" >&2
+	echo "说明预检后仓库、配置或 feed 锁定有变化，停止构建。" >&2
+	exit 1
+fi
+FINGERPRINT="$FINGERPRINT_CALC"
+log "构建指纹: $FINGERPRINT"
 
 # 磁盘检查：全量编译需要 ~30GB
 avail=$(df -Pk "$KIT_DIR" | awk 'NR==2{print int($4/1024/1024)}')
@@ -120,6 +135,7 @@ find "$SRC/bin/targets/rockchip/armv8" -maxdepth 1 -name '*hinlink_h28k*' \
 	echo "config: $(basename "$CONFIG_SEED")"
 	echo "built: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 } > "$OUT/build-info.txt"
+cat "$FP_INFO" >> "$OUT/build-info.txt"
 
 ls -lh "$OUT"
 log "完成: $OUT"

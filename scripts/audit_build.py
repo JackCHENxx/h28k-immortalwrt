@@ -147,12 +147,22 @@ for path in [
     if r.returncode:
         fail(f"语法检查失败 {path}: {r.stderr.strip()}")
 
+for path in [kit / "scripts/fingerprint.py", kit / "scripts/audit_build.py"]:
+    r = subprocess.run([sys.executable, "-m", "py_compile", str(path)], capture_output=True, text=True)
+    if r.returncode:
+        fail(f"Python 语法检查失败 {path}: {r.stderr.strip()}")
+
 wf = read(kit / ".github/workflows/build-h28k.yml")
 for bad in ('REL="${{ inputs.tag }}"', 'VARIANT="${{ inputs.variant }}"'):
     if bad in wf:
         fail(f"工作流仍把输入直接插值进 shell: {bad}")
 if "INPUT_TAG:" not in wf:
     fail("工作流发布步骤没有通过 env 传 tag")
+if "scripts/fingerprint.py" not in wf or "should_build" not in wf:
+    fail("工作流没有接入 fingerprint 预检门禁")
+if "fingerprint: " not in read(kit / "scripts/fingerprint.py"):
+    fail("build-info.txt 没有记录 fingerprint")
+
 
 if errors:
     print(f"[audit] {len(errors)} 项失败，停止构建", file=sys.stderr)
