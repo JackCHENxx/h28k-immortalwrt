@@ -58,9 +58,14 @@ dhcp_check start 38 || fail "DHCP 池默认值不对"
 dhcp_check limit 206 || fail "DHCP 池 limit 不对"
 dhcp_check leasetime 24h || fail "DHCP 池租期不是 24h"
 debugfs -R "cat /lib/apk/db/installed" "$WORK/rootfs.ext4" 2>/dev/null > "$WORK/pkgs.txt" || true
-for pkg in kmod-wireguard wireguard-tools luci-proto-wireguard luci-app-netmode; do
+for pkg in kmod-wireguard wireguard-tools luci-proto-wireguard luci-app-netmode \
+	luci-theme-argon luci-app-argon-config autosamba luci-app-samba4 \
+	luci-app-diskman luci-app-filemanager; do
 	grep -q "^P:$pkg$" "$WORK/pkgs.txt" || fail "缺包 $pkg"
 done
+# Argon 的 uci-defaults 负责把默认主题从 bootstrap 切到 Argon
+debugfs -R "stat /etc/uci-defaults/30_luci-theme-argon" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
+	|| fail "缺 Argon 默认主题脚本（会仍显示 bootstrap）"
 debugfs -R "stat /etc/uci-defaults/98-wireguard" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
 	|| fail "缺 98-wireguard 首次开机脚本"
 debugfs -R "stat /usr/bin/netmode" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
