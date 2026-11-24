@@ -74,7 +74,15 @@ jobs:
           EXPECT_EXTRA: ${{ inputs.variant == 'experience' && 'luci-theme-argon luci-app-argon-config autosamba luci-app-samba4 luci-app-diskman luci-app-filemanager luci-app-dockerman luci-app-openclash' || '' }}
           EXPECT_ARGON: ${{ inputs.variant == 'experience' && '1' || '0' }}
           EXPECT_OPENCLASH: ${{ inputs.variant == 'experience' && '1' || '0' }}
-        run: ./scripts/verify_image.sh out/*-ext4-sysupgrade.img.gz
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          imgs=(out/*-ext4-sysupgrade.img.gz)
+          [ "${#imgs[@]}" -gt 0 ] || { echo "没有找到 ext4 sysupgrade 镜像" >&2; exit 1; }
+          for img in "${imgs[@]}"; do
+            echo "== 校验 $img =="
+            ./scripts/verify_image.sh "$img"
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -88,10 +96,18 @@ jobs:
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+          VARIANT: ${{ inputs.variant || 'default' }}
         run: |
-          VARIANT="${{ inputs.variant }}"
-          [ -n "$VARIANT" ] || VARIANT="default"
-          REL="${{ inputs.tag }}"
+          set -euo pipefail
+          case "$VARIANT" in
+            default|experience) ;;
+            *) echo "非法 variant: $VARIANT" >&2; exit 1 ;;
+          esac
+          REL="${INPUT_TAG:-}"
+          if [ -n "$REL" ] && ! printf '%s' "$REL" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "非法 release tag: $REL" >&2; exit 1
+          fi
           if [ -z "$REL" ]; then
             if [ "$VARIANT" = "experience" ]; then REL="h28k-experience"; else REL="h28k-latest"; fi
           fi

@@ -48,6 +48,8 @@ latest_tag() {
 
 [ -n "$TAG" ] || TAG="$(latest_tag)"
 [ -n "$TAG" ] || { echo "取不到 ImmortalWrt 的 release tag，请手动指定 TAG=" >&2; exit 1; }
+printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+	|| { echo "非法 release tag: $TAG（应为 vX.Y.Z）" >&2; exit 1; }
 log "ImmortalWrt release: $TAG (variant=$VARIANT)"
 [ -f "$CONFIG_SEED" ] || { echo "配置种子不存在: $CONFIG_SEED" >&2; exit 1; }
 

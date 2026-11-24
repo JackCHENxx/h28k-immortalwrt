@@ -3,7 +3,8 @@
 # 用途：上游改了 dts/分区/包名/默认配置时，在发布前失败，而不是发出去才发现。
 set -euo pipefail
 
-IMG="${1:?用法: verify_image.sh <ext4-sysupgrade.img.gz>}"
+[ "$#" -eq 1 ] || { echo "用法: verify_image.sh <ext4-sysupgrade.img.gz>（多个镜像请逐个调用）" >&2; exit 2; }
+IMG="$1"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 

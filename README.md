@@ -207,6 +207,9 @@ wgctl client-conf --name=phone --ip=10.0.0.2 --endpoint=<公网IP或域名> --po
 - 变砖恢复靠 Rockchip maskrom + `rkdeveloptool`（USB 连接、按板子丝印进 maskrom），刷回备份或本工程镜像；刷之前先完整备份原机 eMMC。
 - 不要单独刷 U-Boot，也不要 `dd` 写 `/dev/mtdblock*`；只写 `/dev/mmcblk0` 或走 sysupgrade。
 - 板级 dts 已补齐 `&pcie`、`&usb2phy`、`&combphy`、`&gpu` 节点（PCIe 上的 RTL8111H 就是 WAN 口 `eth1`），U-Boot 补丁与 OpenWrt 主线逐字节一致。
+- 固件沿用官方默认的 **root 空密码**：刷完第一次进 LuCI 就设置密码，别把管理面直接暴露在不可信网络。
+- WireGuard 首次开机会生成 `wg0` 并在 WAN 放行 UDP 51820；不需要时执行 `wgctl apply --enabled=0`，并删除 `firewall.allow_wg`。添加 peer 等于授予其访问整个 LAN 的权限，按需收紧 `wg` zone 的 input/forward。
+- 体验版预装的服务（Docker、Samba、UPnP、frp、Tailscale、ZeroTier、Aria2、Transmission、DLNA）不会替你决定用途；不用就在 LuCI 停用，尤其不要把 UPnP 和 Samba 暴露到公网。
 
 ## 通用层与设备层（方便适配别的板子）
 

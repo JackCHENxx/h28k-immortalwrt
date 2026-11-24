@@ -145,6 +145,13 @@ for path in [
     if r.returncode:
         fail(f"语法检查失败 {path}: {r.stderr.strip()}")
 
+wf = read(kit / ".github/workflows/build-h28k.yml")
+for bad in ('REL="${{ inputs.tag }}"', 'VARIANT="${{ inputs.variant }}"'):
+    if bad in wf:
+        fail(f"工作流仍把输入直接插值进 shell: {bad}")
+if "INPUT_TAG:" not in wf:
+    fail("工作流发布步骤没有通过 env 传 tag")
+
 if errors:
     print(f"[audit] {len(errors)} 项失败，停止构建", file=sys.stderr)
     sys.exit(1)
