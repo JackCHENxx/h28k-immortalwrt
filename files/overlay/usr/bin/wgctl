@@ -87,6 +87,7 @@ ensure_firewall() {
 		uci set firewall.wg.output=ACCEPT
 		uci set firewall.wg.forward=ACCEPT
 	fi
+	uci set firewall.wg.masq=1
 	uci -q get firewall.wg.network | grep -qx "$IFACE" || uci add_list firewall.wg.network="$IFACE"
 	if ! uci -q get firewall.wg_lan >/dev/null 2>&1; then
 		uci set firewall.wg_lan=forwarding
@@ -97,6 +98,11 @@ ensure_firewall() {
 		uci set firewall.lan_wg=forwarding
 		uci set firewall.lan_wg.src=lan
 		uci set firewall.lan_wg.dest=wg
+	fi
+	if ! uci -q get firewall.wg_wan >/dev/null 2>&1; then
+		uci set firewall.wg_wan=forwarding
+		uci set firewall.wg_wan.src=wg
+		uci set firewall.wg_wan.dest=wan
 	fi
 	if ! uci -q get firewall.allow_wg >/dev/null 2>&1; then
 		uci set firewall.allow_wg=rule

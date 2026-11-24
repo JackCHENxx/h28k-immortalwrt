@@ -155,7 +155,7 @@ netmode restore                # 回到第一次改网络配置之前（失联�
 | 接口 / 地址 | `wg0`，`10.0.0.1/24` |
 | 监听 | UDP `51820`，MTU `1420` |
 | 私钥 | `/etc/wireguard/wg0.key`（`600`，首次开机 `wg genkey` 生成） |
-| 防火墙 | 新建 `wg` zone；`wg→lan`、`lan→wg` 两条 forwarding；WAN 放行 UDP 51820 |
+| 防火墙 | 新建 `wg` zone（`masq=1`）；`wg→lan`、`lan→wg`、`wg→wan` 三条 forwarding；WAN 放行 UDP 51820 |
 
 它只建了服务端框架，**没有任何 peer**，所以默认谁都连不进来。
 
@@ -170,7 +170,7 @@ wgctl peer-del --name=phone
 wgctl client-conf --name=phone --ip=10.0.0.2 --endpoint=<公网IP或域名> --port=51820 --dns=10.0.0.1
 ```
 
-要让 VPN 客户端访问整个内网，客户端配置的 `AllowedIPs` 要包含 `192.168.2.0/24`；默认生成的客户端配置是全局代理（`0.0.0.0/0`）。升级时如果保留了旧的 `/etc/config/network`，`wg0` 地址不会被覆盖；想统一到新默认值，删掉 `wg0` 后重跑 `wgctl init`，或在设置页里直接改地址。
+要让 VPN 客户端访问整个内网，客户端配置的 `AllowedIPs` 要包含 `192.168.2.0/24`；默认生成的客户端配置是全局代理（`0.0.0.0/0`），`wg` zone 做 masq 并通过 `wg→wan` 转发，客户端可以经本机上网。升级时如果保留了旧的 `/etc/config/network`，`wg0` 地址不会被覆盖；想统一到新默认值，删掉 `wg0` 后重跑 `wgctl init`，或在设置页里直接改地址。
 
 注意两点：旁路由模式下 WAN 接口是禁用的，外网连不进来，这是预期行为；RK3528 上 WireGuard 走 ChaCha20/NEON，实测通常 200–400Mbps，跑满千兆不现实。
 
@@ -288,7 +288,7 @@ wgctl client-conf --name=phone --ip=10.0.0.2 --endpoint=<公网IP或域名> --po
 
 ## 验证记录（本目录已实测的部分）
 
-- `adapt.py` 在 `v25.12.2` 干净源码树上执行通过，自检 14 项全 OK，重复执行全部跳过（幂等）。
+- `adapt.py` 在 `v25.12.2` 干净源码树上执行通过，自检 16 项全 OK，重复执行全部跳过（幂等）。
 - 调优脚本与 `netmode` 装进目标后权限均为 755，`sh -n` 语法检查通过；调优脚本只对 `hinlink,h28k` 执行。
 - `.config` 里 `CONFIG_PACKAGE_luci-app-commands=y` 被 defconfig 保留，用于承载“系统 → 自定义命令”的四个一键按钮。
 - `make defconfig` 接受 `CONFIG_TARGET_rockchip_armv8_DEVICE_hinlink_h28k=y`，设备 profile 被正确识别。
