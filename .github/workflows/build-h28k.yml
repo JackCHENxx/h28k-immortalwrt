@@ -19,7 +19,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "0 20 * * 0"   # 每周一 04:00 (UTC+8) 自动跟一次最新 release
+    - cron: "0 20 * * 3"   # 每周四 04:00 (UTC+8) 自动跟一次最新 release
 
 concurrency:
   group: h28k-build-${{ inputs.variant || 'default' }}
