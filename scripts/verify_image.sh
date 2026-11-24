@@ -57,6 +57,13 @@ debugfs -R "stat /etc/uci-defaults/98-wireguard" "$WORK/rootfs.ext4" >/dev/null 
 	|| fail "缺 98-wireguard 首次开机脚本"
 debugfs -R "stat /usr/bin/netmode" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
 	|| fail "缺 /usr/bin/netmode"
-ok "默认 IP、DHCP 池、WireGuard、netmode 均在镜像内"
+debugfs -R "stat /usr/bin/wgctl" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
+	|| fail "缺 /usr/bin/wgctl"
+debugfs -R "cat /usr/bin/wgctl" "$WORK/rootfs.ext4" 2>/dev/null > "$WORK/wgctl.txt" || true
+grep -q "DEFAULT_ADDR=10.0.0.1/24" "$WORK/wgctl.txt" \
+	|| fail "WireGuard 默认地址不是 10.0.0.1/24"
+debugfs -R "stat /www/luci-static/resources/view/netmode/wireguard.js" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
+	|| fail "缺 WireGuard 设置页面"
+ok "默认 IP、DHCP 池、WireGuard、wgctl、设置页面均在镜像内"
 
 echo "[verify] 全部通过: $IMG"

@@ -1,57 +1,11 @@
 #!/bin/sh
-# 首次开机预置 WireGuard 服务端（wg0，UDP 51820，10.66.0.1/24）
-# 只生成服务端与防火墙框架，不预置任何 peer，也不会放行未知客户端。
-# 后续在 LuCI「网络 → 接口 → wg0 → 对端」里加 peer 即可。
+# 首次开机预置 WireGuard 服务端（wg0，UDP 51820，10.0.0.1/24）
+# 只生成服务端与防火墙框架，不预置任何 peer。
+# 图形界面：LuCI「网络 → WireGuard 设置」；命令行：wgctl。
 
+[ -x /usr/bin/wgctl ] || exit 0
 [ -x /usr/bin/wg ] || exit 0
 [ -f /etc/config/network ] || exit 0
-uci -q get network.wg0 >/dev/null 2>&1 && exit 0
 
-mkdir -p /etc/wireguard 2>/dev/null || exit 0
-chmod 700 /etc/wireguard
-
-key=/etc/wireguard/wg0.key
-if [ ! -s "$key" ]; then
-	umask 077
-	wg genkey > "$key" 2>/dev/null || exit 0
-fi
-priv=$(cat "$key" 2>/dev/null)
-[ -n "$priv" ] || exit 0
-
-uci -q batch <<-EOT
-	set network.wg0='interface'
-	set network.wg0.proto='wireguard'
-	set network.wg0.privatekey='$priv'
-	set network.wg0.listen_port='51820'
-	set network.wg0.addresses='10.66.0.1/24'
-	set network.wg0.mtu='1420'
-	set network.wg0.auto='1'
-
-	set firewall.wg='zone'
-	set firewall.wg.name='wg'
-	add_list firewall.wg.network='wg0'
-	set firewall.wg.input='ACCEPT'
-	set firewall.wg.output='ACCEPT'
-	set firewall.wg.forward='ACCEPT'
-
-	set firewall.wg_lan='forwarding'
-	set firewall.wg_lan.src='wg'
-	set firewall.wg_lan.dest='lan'
-
-	set firewall.lan_wg='forwarding'
-	set firewall.lan_wg.src='lan'
-	set firewall.lan_wg.dest='wg'
-
-	set firewall.allow_wg='rule'
-	set firewall.allow_wg.name='Allow-WireGuard'
-	set firewall.allow_wg.src='wan'
-	set firewall.allow_wg.proto='udp'
-	set firewall.allow_wg.dest_port='51820'
-	set firewall.allow_wg.target='ACCEPT'
-
-	commit network
-	commit firewall
-EOT
-
-logger -t wireguard-init "已生成 WireGuard 服务端 wg0（UDP 51820，10.66.0.1/24），尚无 peer"
+/usr/bin/wgctl init
 exit 0

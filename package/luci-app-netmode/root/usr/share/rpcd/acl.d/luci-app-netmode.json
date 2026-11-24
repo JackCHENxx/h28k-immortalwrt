@@ -1,17 +1,19 @@
 {
 	"luci-app-netmode": {
-		"description": "网络向导：执行 netmode，并读写 network / dhcp / firewall / netmode 配置",
+		"description": "网络向导与 WireGuard 设置：执行 netmode / wgctl，读写 network / dhcp / firewall / netmode 配置",
 		"read": {
 			"file": {
-				"/usr/bin/netmode": [ "exec" ]
+				"/usr/bin/netmode": [ "exec" ],
+				"/usr/bin/wgctl": [ "exec" ]
 			},
 			"uci": [ "network", "dhcp", "firewall", "netmode" ]
 		},
 		"write": {
 			"file": {
-				"/usr/bin/netmode": [ "exec" ]
+				"/usr/bin/netmode": [ "exec" ],
+				"/usr/bin/wgctl": [ "exec" ]
 			},
-			"uci": [ "network", "dhcp", "netmode" ]
+			"uci": [ "network", "dhcp", "firewall", "netmode" ]
 		}
 	}
 }

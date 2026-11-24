@@ -18,7 +18,8 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 | `scripts/verify_image.sh` | 发布前拆镜像自检：U-Boot、dtb、分区、默认 IP、DHCP 池、包清单 |
 | `files/overlay/etc/uci-defaults/99-h28k-tuning` | 首次开机调优：zram 按内存自适应（2GB→1.5G、4GB→3G）、swappiness 80、packet steering、flow offload，并预置旁路由/恢复备份按钮 |
 | `files/overlay/usr/bin/netmode` | 向导后端脚本（`setup bypass/dhcp/pppoe`、`detect`、`bypass` / `router` / `lanip` / `dhcp` / `status`） |
-| `package/luci-app-netmode` | 自带 LuCI 应用：**网络 → 网络向导**，三步流程（选方式 → 填参数 → 完成），三种联网方式（宽带拨号 / 连现有路由 / 旁路由） |
+| `files/overlay/usr/bin/wgctl` | WireGuard 后端（`init` / `status` / `apply` / `keygen` / `peer-add` / `peer-del` / `client-conf`），首次开机由 `98-wireguard` 调 `wgctl init` |
+| `package/luci-app-netmode` | 自带 LuCI 应用：**网络 → 网络向导**（三种联网方式三步配置）与 **网络 → WireGuard 设置**（服务端参数、密钥、对端、客户端配置） |
 
 `adapt.py` 是幂等的：重复执行只会跳过。如果哪天 ImmortalWrt 自己收录了 H28K，脚本会**主动停下**并要求人工合并，而不是覆盖上游实现；确认要沿用本套件时加 `--force`。
 
@@ -151,12 +152,25 @@ netmode restore                # 回到第一次改网络配置之前（失联�
 
 | 项 | 值 |
 | --- | --- |
-| 接口 / 地址 | `wg0`，`10.66.0.1/24` |
+| 接口 / 地址 | `wg0`，`10.0.0.1/24` |
 | 监听 | UDP `51820`，MTU `1420` |
 | 私钥 | `/etc/wireguard/wg0.key`（`600`，首次开机 `wg genkey` 生成） |
 | 防火墙 | 新建 `wg` zone；`wg→lan`、`lan→wg` 两条 forwarding；WAN 放行 UDP 51820 |
 
-它只建了服务端框架，**没有任何 peer**，所以默认谁都连不进来。用法：LuCI「网络 → 接口 → wg0 → 对端」里加 peer（填对方公钥、`AllowedIPs` 如 `10.66.0.2/32`），客户端把 endpoint 指向你家公网 IP:51820。要让 VPN 客户端访问整个内网，peer 的 `AllowedIPs` 还要包含 `192.168.2.0/24`。
+它只建了服务端框架，**没有任何 peer**，所以默认谁都连不进来。
+
+图形界面：LuCI「网络 → **WireGuard 设置**」，可以改启用状态、本机地址、UDP 端口、MTU，重新生成服务端密钥，增删对端，或直接填客户端名称/地址/公网地址生成一份 `wg.conf`（会同时把该客户端加入对端列表）。命令行等价入口是 `/usr/bin/wgctl`：
+
+```
+wgctl status
+wgctl apply --address=10.0.0.1/24 --port=51820 --mtu=1420 --enabled=1
+wgctl keygen
+wgctl peer-add --name=phone --pubkey=<44位公钥> --allowedips=10.0.0.2/32 --keepalive=25
+wgctl peer-del --name=phone
+wgctl client-conf --name=phone --ip=10.0.0.2 --endpoint=<公网IP或域名> --port=51820 --dns=10.0.0.1
+```
+
+要让 VPN 客户端访问整个内网，客户端配置的 `AllowedIPs` 要包含 `192.168.2.0/24`；默认生成的客户端配置是全局代理（`0.0.0.0/0`）。升级时如果保留了旧的 `/etc/config/network`，`wg0` 地址不会被覆盖；想统一到新默认值，删掉 `wg0` 后重跑 `wgctl init`，或在设置页里直接改地址。
 
 注意两点：旁路由模式下 WAN 接口是禁用的，外网连不进来，这是预期行为；RK3528 上 WireGuard 走 ChaCha20/NEON，实测通常 200–400Mbps，跑满千兆不现实。
 

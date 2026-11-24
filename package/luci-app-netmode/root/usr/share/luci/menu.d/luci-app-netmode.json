@@ -9,5 +9,16 @@
 		"depends": {
 			"acl": [ "luci-app-netmode" ]
 		}
+	},
+	"admin/network/wireguard": {
+		"title": "WireGuard 设置",
+		"order": 61,
+		"action": {
+			"type": "view",
+			"path": "netmode/wireguard"
+		},
+		"depends": {
+			"acl": [ "luci-app-netmode" ]
+		}
 	}
 }

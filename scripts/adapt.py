@@ -300,8 +300,11 @@ def main():
         "内核 dts": os.path.exists(dts_dst),
         "PCIe/USB 节点": "&pcie {" in read(dts_dst) and "&usb2phy {" in read(dts_dst),
         "WireGuard 预置": os.access(os.path.join(target, "armv8/base-files/etc/uci-defaults/98-wireguard"), os.X_OK),
+        "WireGuard 后台": os.access(os.path.join(target, "armv8/base-files/usr/bin/wgctl"), os.X_OK)
+                          and "DEFAULT_ADDR=10.0.0.1/24" in read(os.path.join(target, "armv8/base-files/usr/bin/wgctl")),
         "开机调优": os.access(tuning_dst, os.X_OK),
         "网络向导弹出": os.path.exists(os.path.join(pkg_dst, "htdocs/luci-static/resources/view/netmode/guide.js")),
+        "WireGuard 界面": os.path.exists(os.path.join(pkg_dst, "htdocs/luci-static/resources/view/netmode/wireguard.js")),
         "DHCP 池": re.search(r"(?m)^\toption start\s+38$", read(dhcp_tpl)) is not None
                    and re.search(r"(?m)^\toption limit\s+206$", read(dhcp_tpl)) is not None
                    and re.search(r"(?m)^\toption leasetime\s+24h$", read(dhcp_tpl)) is not None,

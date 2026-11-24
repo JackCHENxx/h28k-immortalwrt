@@ -1,0 +1,345 @@
+#!/bin/sh
+# WireGuard 服务端配置后端（wg0）
+# 用法：wgctl status|init|apply|keygen|peer-add|peer-del|client-conf
+# 只操作 network.wg0 / firewall 里本套件创建的固定 section，配置写盘后重启 wg0。
+
+set -u
+
+command -v wg >/dev/null 2>&1 || { echo "错误: 未安装 wireguard-tools" >&2; exit 1; }
+
+IFACE=wg0
+DIR=/etc/wireguard
+KEY=$DIR/wg0.key
+DEFAULT_ADDR=10.0.0.1/24
+DEFAULT_PORT=51820
+DEFAULT_MTU=1420
+DEFAULT_DNS=10.0.0.1
+
+log() { logger -t wgctl "$*" 2>/dev/null || true; }
+die() { echo "错误: $*" >&2; exit 1; }
+
+is_ipv4() {
+	echo "$1" | awk -F. '
+		NF != 4 { exit 1 }
+		{ for (i = 1; i <= 4; i++) if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1 }
+		{ exit 0 }'
+}
+
+is_cidr() {
+	local ip=${1%/*} pfx=${1#*/}
+	[ "$ip" != "$1" ] || return 1
+	is_ipv4 "$ip" || return 1
+	case "$pfx" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$pfx" -ge 0 ] && [ "$pfx" -le 32 ]
+}
+
+is_port() {
+	case "$1" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+is_mtu() {
+	case "$1" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$1" -ge 1280 ] && [ "$1" -le 1500 ]
+}
+
+is_wgkey() {
+	[ ${#1} -eq 44 ] || return 1
+	case "$1" in *=) ;; *) return 1 ;; esac
+	echo "$1" | grep -Eq '^[A-Za-z0-9+/]{43}=$'
+}
+
+slug() {
+	printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_'
+}
+
+ensure_key() {
+	mkdir -p "$DIR" || return 1
+	chmod 700 "$DIR"
+	if [ ! -s "$KEY" ]; then
+		umask 077
+		wg genkey > "$KEY" || return 1
+	fi
+	chmod 600 "$KEY"
+}
+
+pubkey() { wg pubkey < "$KEY"; }
+
+ensure_iface() {
+	local addr=$1 port=$2 mtu=$3
+	if ! uci -q get "network.$IFACE" >/dev/null 2>&1; then
+		uci set "network.$IFACE=interface"
+	fi
+	uci set "network.$IFACE.proto=wireguard"
+	uci set "network.$IFACE.privatekey=$(cat "$KEY")"
+	uci set "network.$IFACE.addresses=$addr"
+	uci set "network.$IFACE.listen_port=$port"
+	uci set "network.$IFACE.mtu=$mtu"
+	uci set "network.$IFACE.auto=1"
+}
+
+ensure_firewall() {
+	local port=$1
+	if ! uci -q get firewall.wg >/dev/null 2>&1; then
+		uci set firewall.wg=zone
+		uci set firewall.wg.name=wg
+		uci set firewall.wg.input=ACCEPT
+		uci set firewall.wg.output=ACCEPT
+		uci set firewall.wg.forward=ACCEPT
+	fi
+	uci -q get firewall.wg.network | grep -qx "$IFACE" || uci add_list firewall.wg.network="$IFACE"
+	if ! uci -q get firewall.wg_lan >/dev/null 2>&1; then
+		uci set firewall.wg_lan=forwarding
+		uci set firewall.wg_lan.src=wg
+		uci set firewall.wg_lan.dest=lan
+	fi
+	if ! uci -q get firewall.lan_wg >/dev/null 2>&1; then
+		uci set firewall.lan_wg=forwarding
+		uci set firewall.lan_wg.src=lan
+		uci set firewall.lan_wg.dest=wg
+	fi
+	if ! uci -q get firewall.allow_wg >/dev/null 2>&1; then
+		uci set firewall.allow_wg=rule
+		uci set firewall.allow_wg.name=Allow-WireGuard
+		uci set firewall.allow_wg.src=wan
+		uci set firewall.allow_wg.proto=udp
+		uci set firewall.allow_wg.target=ACCEPT
+	fi
+	uci set firewall.allow_wg.dest_port="$port"
+}
+
+reload_iface() {
+	ifdown "$IFACE" >/dev/null 2>&1 || true
+	ifup "$IFACE" >/dev/null 2>&1 || true
+}
+
+reload_firewall() {
+	/etc/init.d/firewall reload >/dev/null 2>&1 || true
+}
+
+commit() { uci commit network; uci commit firewall; }
+
+peer_section() {
+	local name
+	name=$(slug "$1")
+	[ -n "$name" ] || die "对端名称不合法"
+	echo "peer_$name"
+}
+
+peer_exists() {
+	uci -q get "network.$1" >/dev/null 2>&1
+}
+
+cmd_status() {
+	local enabled auto up peers addr port mtu pub
+	auto=$(uci -q get "network.$IFACE.auto" || echo 0)
+	[ "$auto" = "1" ] && enabled=1 || enabled=0
+	addr=$(uci -q get "network.$IFACE.addresses" || echo "$DEFAULT_ADDR")
+	port=$(uci -q get "network.$IFACE.listen_port" || echo "$DEFAULT_PORT")
+	mtu=$(uci -q get "network.$IFACE.mtu" || echo "$DEFAULT_MTU")
+	[ -s "$KEY" ] && pub=$(pubkey) || pub=''
+	if wg show "$IFACE" >/dev/null 2>&1; then up=1; else up=0; fi
+	peers=0
+	[ "$up" = "1" ] && peers=$(wg show "$IFACE" peers 2>/dev/null | wc -l | tr -d ' ')
+	echo "enabled=$enabled"
+	echo "up=$up"
+	echo "address=$addr"
+	echo "port=$port"
+	echo "mtu=$mtu"
+	echo "publickey=$pub"
+	echo "peers=$peers"
+}
+
+cmd_init() {
+	ensure_key || die "无法生成私钥（wireguard-tools 是否已安装？）"
+	if uci -q get "network.$IFACE" >/dev/null 2>&1; then
+		ensure_firewall "$(uci -q get firewall.allow_wg.dest_port || echo "$DEFAULT_PORT")"
+		commit
+		log "wg0 已存在，保持现有配置"
+		echo "exists"
+		return 0
+	fi
+	ensure_iface "$DEFAULT_ADDR" "$DEFAULT_PORT" "$DEFAULT_MTU"
+	ensure_firewall "$DEFAULT_PORT"
+	commit
+	log "已生成 WireGuard 服务端 $IFACE（UDP $DEFAULT_PORT，$DEFAULT_ADDR）"
+	echo "created"
+}
+
+cmd_apply() {
+	local addr=$DEFAULT_ADDR port=$DEFAULT_PORT mtu=$DEFAULT_MTU enabled=1
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--address=*) addr=${1#*=} ;;
+			--port=*) port=${1#*=} ;;
+			--mtu=*) mtu=${1#*=} ;;
+			--enabled=*) enabled=${1#*=} ;;
+			--address) shift; addr=${1:-} ;;
+			--port) shift; port=${1:-} ;;
+			--mtu) shift; mtu=${1:-} ;;
+			--enabled) shift; enabled=${1:-1} ;;
+			*) die "未知参数 $1" ;;
+		esac
+		shift
+	done
+	is_cidr "$addr" || die "地址必须是 CIDR，例如 $DEFAULT_ADDR"
+	is_port "$port" || die "端口必须在 1–65535"
+	is_mtu "$mtu" || die "MTU 必须在 1280–1500"
+	case "$enabled" in 0|1) ;; *) die "--enabled 只能是 0 或 1" ;; esac
+
+	ensure_key || die "读取私钥失败"
+	ensure_iface "$addr" "$port" "$mtu"
+	uci set "network.$IFACE.auto=$enabled"
+	ensure_firewall "$port"
+	commit
+
+	if [ "$enabled" = "1" ]; then
+		reload_iface
+	else
+		ifdown "$IFACE" >/dev/null 2>&1 || true
+	fi
+	reload_firewall
+	echo "已保存：$addr，UDP $port，MTU $mtu，$([ "$enabled" = 1 ] && echo 启用 || echo 停用)"
+}
+
+cmd_keygen() {
+	ensure_key || die "生成私钥失败"
+	local old=$DIR/wg0.key.bak.$(date +%Y%m%d%H%M%S)
+	cp -p "$KEY" "$old" 2>/dev/null || true
+	umask 077
+	wg genkey > "$KEY" || die "生成私钥失败"
+	chmod 600 "$KEY"
+	uci set "network.$IFACE.privatekey=$(cat "$KEY")"
+	uci commit network
+	reload_iface
+	echo "新公钥: $(pubkey)"
+	echo "旧私钥已备份到 $old；所有现有对端需要重新配置。"
+}
+
+peer_add_core() {
+	local name=$1 pub=$2 allowed=$3 endpoint=$4 eport=$5 keepalive=$6 psk=$7
+	local sec
+	sec=$(peer_section "$name")
+	peer_exists "$sec" && die "对端 $name 已存在"
+	uci set "network.$sec=wireguard_wg0"
+	uci set "network.$sec.publickey=$pub"
+	uci set "network.$sec.allowedips=$allowed"
+	[ -n "$endpoint" ] && uci set "network.$sec.endpoint_host=$endpoint"
+	[ -n "$eport" ] && uci set "network.$sec.endpoint_port=$eport"
+	[ -n "$keepalive" ] && uci set "network.$sec.persistent_keepalive=$keepalive"
+	[ -n "$psk" ] && uci set "network.$sec.presharedkey=$psk"
+	uci commit network
+	echo "$sec"
+}
+
+cmd_peer_add() {
+	local name='' pub='' allowed='' endpoint='' eport='' keepalive='' psk=''
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--name=*) name=${1#*=} ;;
+			--pubkey=*) pub=${1#*=} ;;
+			--allowedips=*) allowed=${1#*=} ;;
+			--endpoint=*) endpoint=${1#*=} ;;
+			--endpoint-port=*) eport=${1#*=} ;;
+			--keepalive=*) keepalive=${1#*=} ;;
+			--presharedkey=*) psk=${1#*=} ;;
+			*) die "未知参数 $1" ;;
+		esac
+		shift
+	done
+	[ -n "$name" ] || die "缺少对端名称"
+	is_wgkey "$pub" || die "公钥格式不对（应为 44 位 base64，末尾 =）"
+	[ -n "$allowed" ] || die "缺少 AllowedIPs"
+	is_cidr "${allowed%%,*}" || die "AllowedIPs 里第一段必须是 CIDR"
+	[ -z "$endpoint" ] || echo "$endpoint" | grep -Eq '^[A-Za-z0-9._:-]+$' || die "endpoint 含非法字符"
+	[ -z "$eport" ] || is_port "$eport" || die "endpoint 端口不合法"
+	[ -z "$keepalive" ] || { case "$keepalive" in *[!0-9]*) die "keepalive 必须是秒数" ;; esac; }
+	[ -z "$psk" ] || is_wgkey "$psk" || die "预共享密钥格式不对"
+
+	existing=$(uci show network 2>/dev/null | awk -F"'" '/\.publickey=/{print $2}')
+	if echo "$existing" | grep -qx "$pub"; then
+		die "这个公钥已经存在"
+	fi
+	sec=$(peer_add_core "$name" "$pub" "$allowed" "$endpoint" "$eport" "$keepalive" "$psk")
+	reload_iface
+	echo "已添加对端 $name（$sec）"
+}
+
+cmd_peer_del() {
+	local name='' sec
+	while [ $# -gt 0 ]; do
+		case "$1" in --name=*) name=${1#*=} ;; *) die "未知参数 $1" ;; esac
+		shift
+	done
+	[ -n "$name" ] || die "缺少对端名称"
+	sec=$(peer_section "$name")
+	peer_exists "$sec" || die "对端 $name 不存在"
+	uci delete "network.$sec"
+	uci commit network
+	reload_iface
+	echo "已删除对端 $name"
+}
+
+cmd_client_conf() {
+	local name='' ip='' endpoint='' port=$DEFAULT_PORT dns=$DEFAULT_DNS
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--name=*) name=${1#*=} ;;
+			--ip=*) ip=${1#*=} ;;
+			--endpoint=*) endpoint=${1#*=} ;;
+			--port=*) port=${1#*=} ;;
+			--dns=*) dns=${1#*=} ;;
+			*) die "未知参数 $1" ;;
+		esac
+		shift
+	done
+	[ -n "$name" ] || die "缺少客户端名称"
+	is_ipv4 "$ip" || die "客户端地址必须是 IPv4（例如 10.0.0.2）"
+	is_port "$port" || die "端口不合法"
+	[ -n "$endpoint" ] || die "缺少服务端地址（公网 IP 或域名）"
+	echo "$endpoint" | grep -Eq '^[A-Za-z0-9._:-]+$' || die "服务端地址含非法字符"
+	[ -z "$dns" ] || is_ipv4 "$dns" || die "DNS 必须是 IPv4"
+
+	mkdir -p "$DIR/clients"; chmod 700 "$DIR/clients"
+	ckey=$DIR/clients/$(slug "$name").key
+	[ -s "$ckey" ] || { umask 077; wg genkey > "$ckey" || die "生成客户端私钥失败"; }
+	chmod 600 "$ckey"
+	cpub=$(wg pubkey < "$ckey")
+
+	sec=$(peer_add_core "$name" "$cpub" "$ip/32" '' '' '25' '')
+	reload_iface
+
+	conf=$DIR/clients/$(slug "$name").conf
+	umask 077
+	{
+		echo "[Interface]"
+		echo "PrivateKey = $(cat "$ckey")"
+		echo "Address = $ip/32"
+		[ -n "$dns" ] && echo "DNS = $dns"
+		echo "MTU = 1420"
+		echo
+		echo "[Peer]"
+		echo "PublicKey = $(pubkey)"
+		echo "AllowedIPs = 0.0.0.0/0"
+		echo "Endpoint = $endpoint:$port"
+		echo "PersistentKeepalive = 25"
+	} > "$conf"
+	chmod 600 "$conf"
+	echo "客户端 $name 已加入（$sec），配置如下（同时保存在 $conf）："
+	echo
+	cat "$conf"
+}
+
+case "${1:-}" in
+	status) cmd_status ;;
+	init) cmd_init ;;
+	apply) shift; cmd_apply "$@" ;;
+	keygen) shift; cmd_keygen ;;
+	peer-add) shift; cmd_peer_add "$@" ;;
+	peer-del) shift; cmd_peer_del "$@" ;;
+	client-conf) shift; cmd_client_conf "$@" ;;
+	*)
+		echo "用法: wgctl status|init|apply|keygen|peer-add|peer-del|client-conf" >&2
+		exit 2
+		;;
+esac

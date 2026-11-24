@@ -19,13 +19,13 @@ define Package/luci-app-netmode
   SECTION:=luci
   CATEGORY:=LuCI
   SUBMENU:=3. Applications
-  TITLE:=网络向导（主路由/旁路由一键切换）
-  DEPENDS:=+luci-base
+  TITLE:=网络向导与 WireGuard 设置
+  DEPENDS:=+luci-base +wireguard-tools +kmod-wireguard
   PKGARCH:=all
 endef
 
 define Package/luci-app-netmode/description
-  通用网络向导页面：一键切换主路由/旁路由，直接改 LAN IP 与 DHCP。适用于任意 OpenWrt 设备。
+  通用网络向导与 WireGuard 设置页面：一键切换主路由/旁路由、管理 wg0 地址/端口/对端。适用于任意 OpenWrt 设备。
 endef
 
 define Build/Compile
@@ -38,6 +38,7 @@ define Package/luci-app-netmode/install
 	$(CP) ./root/usr/share/luci/menu.d/luci-app-netmode.json $(1)/usr/share/luci/menu.d/
 	$(CP) ./root/usr/share/rpcd/acl.d/luci-app-netmode.json $(1)/usr/share/rpcd/acl.d/
 	$(CP) ./htdocs/luci-static/resources/view/netmode/guide.js $(1)/www/luci-static/resources/view/netmode/
+	$(CP) ./htdocs/luci-static/resources/view/netmode/wireguard.js $(1)/www/luci-static/resources/view/netmode/
 endef
 
 $(eval $(call BuildPackage,luci-app-netmode))
