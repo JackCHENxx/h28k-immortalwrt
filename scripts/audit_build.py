@@ -67,6 +67,8 @@ if variant == "experience":
         fail(f"体验版缺插件 {p}")
     for p in sorted(forbidden_any & pkgs):
         fail(f"体验版不应同时装互斥代理插件 {p}")
+    if "CONFIG_RUBY_ENABLE_YJIT=y" in read(seed):
+        fail("体验版开了 Ruby YJIT，会拉 rust/host 导致 Actions 编译失败")
 else:
     for p in sorted({"luci-theme-argon", "luci-app-openclash", "luci-app-dockerman",
                      "autosamba", "luci-app-diskman", "luci-app-filemanager"} & pkgs):
