@@ -93,6 +93,10 @@ if [ "${EXPECT_OPENCLASH:-0}" = 1 ]; then
 		|| fail "OpenClash 默认不是关闭状态（开机会改防火墙）"
 	debugfs -R "stat /etc/uci-defaults/99-openclash-firewall-guard" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
 		|| fail "缺 OpenClash 防火墙 include 清理脚本"
+	debugfs -R "stat /etc/init.d/openclash-firewall-guard" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
+		|| fail "缺 OpenClash 每次开机的防火墙 guard"
+	debugfs -R "stat /etc/rc.d/S18openclash-firewall-guard" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
+		|| fail "OpenClash 防火墙 guard 没有开机启用"
 fi
 ok "默认 IP、DHCP 池、WireGuard、wgctl、设置页面均在镜像内"
 

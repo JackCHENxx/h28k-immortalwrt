@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+# 每次开机兜底：OpenClash 未启用时不允许残留 firewall.openclash include。
+# 启用时保留，由 OpenClash 自己的 init 脚本生成 /var/etc/openclash.include。
+START=18
+
+start() {
+	local enabled
+	enabled=$(uci -q get openclash.config.enable 2>/dev/null || echo 0)
+	[ "$enabled" = "1" ] && return 0
+	uci -q delete firewall.openclash
+	uci -q commit firewall
+}

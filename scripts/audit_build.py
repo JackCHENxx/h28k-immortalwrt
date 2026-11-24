@@ -114,6 +114,17 @@ if "uci -q delete firewall.openclash" not in guard:
 if not (kit / "files/overlay/etc/uci-defaults/99-openclash-firewall-guard").stat().st_mode & 0o111:
     fail("99-openclash-firewall-guard 没有执行权限")
 
+bootguard = kit / "files/overlay/etc/init.d/openclash-firewall-guard"
+if not bootguard.exists():
+    fail("缺每次开机执行的 OpenClash 防火墙 guard")
+elif "uci -q delete firewall.openclash" not in read(bootguard):
+    fail("开机 guard 没有清理 firewall.openclash")
+elif not bootguard.stat().st_mode & 0o111:
+    fail("开机 guard 没有执行权限")
+rc = kit / "files/overlay/etc/rc.d/S18openclash-firewall-guard"
+if not rc.is_symlink() or "openclash-firewall-guard" not in str(rc.resolve()):
+    fail("S18openclash-firewall-guard 没有正确启用")
+
 oc_cfg = read(src / "feeds/luci/applications/luci-app-openclash/root/etc/config/openclash")
 if not re.search(r"option\s+enable\s+'0'", oc_cfg):
     fail("OpenClash 默认不是 enable=0，开机会改防火墙")
@@ -127,6 +138,7 @@ for path in [
     kit / "files/overlay/usr/bin/wgctl",
     kit / "files/overlay/etc/uci-defaults/98-wireguard",
     kit / "files/overlay/etc/uci-defaults/99-openclash-firewall-guard",
+    kit / "files/overlay/etc/init.d/openclash-firewall-guard",
 ]:
     cmd = ["bash", "-n", str(path)] if path.suffix == ".sh" or path.name == "build.sh" else ["sh", "-n", str(path)]
     r = subprocess.run(cmd, capture_output=True, text=True)
