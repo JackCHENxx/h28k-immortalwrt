@@ -23,7 +23,7 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 
 `adapt.py` 是幂等的：重复执行只会跳过。如果哪天 ImmortalWrt 自己收录了 H28K，脚本会**主动停下**并要求人工合并，而不是覆盖上游实现；确认要沿用本套件时加 `--force`。
 
-固件保留 ImmortalWrt 的板级/emortal 默认能力（`default-settings-chn` 中文时区与国内源、`autocore`、`automount`、`luci-app-cpufreq`），并默认装入其标志性的 **Argon 主题**、`autosamba`（USB 插入自动配置 Samba 共享）、`luci-app-diskman` 和 `luci-app-filemanager`，避免刷完仍是 OpenWrt 的 bootstrap 外观、缺一块可视化的存储管理入口。
+固件保留 ImmortalWrt 官方 rockchip 目标默认安装的板级/emortal 能力（`default-settings-chn` 中文时区与国内源、`autocore`、`automount`、`luci-app-cpufreq`、`owut`）。注意 **Argon 主题、autosamba、diskman、filemanager 并不在官方默认清单里**，因此不预装；需要时在 LuCI 软件包页面自行安装。
 
 ## 方式一：GitHub Actions（推荐，约 40–70 分钟出镜像）
 
