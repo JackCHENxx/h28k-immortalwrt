@@ -23,7 +23,7 @@ H28K 的板级支持目前只存在于 OpenWrt 主线（2026-01 合入）。所�
 
 `adapt.py` 是幂等的：重复执行只会跳过。如果哪天 ImmortalWrt 自己收录了 H28K，脚本会**主动停下**并要求人工合并，而不是覆盖上游实现；确认要沿用本套件时加 `--force`。
 
-固件保留 ImmortalWrt 官方 rockchip 目标默认安装的板级/emortal 能力（`default-settings-chn` 中文时区与国内源、`autocore`、`automount`、`luci-app-cpufreq`、`owut`）。注意 **Argon 主题、autosamba、diskman、filemanager 并不在官方默认清单里**，因此不预装；需要时在 LuCI 软件包页面自行安装。
+默认版固件保留 ImmortalWrt 官方 rockchip 目标默认安装的板级/emortal 能力（`default-settings-chn` 中文时区与国内源、`autocore`、`automount`、`luci-app-cpufreq`、`owut`）。注意 **Argon 主题、autosamba、diskman、filemanager 并不在官方默认清单里**；要一次体验这些插件，用上面的 `VARIANT=experience` 构建。
 
 ## 方式一：GitHub Actions（推荐，约 40–70 分钟出镜像）
 
@@ -40,7 +40,14 @@ TAG=v25.12.2 ./build.sh    # 指定版本
 JOBS=8 ./build.sh          # 指定并行度
 ./build.sh --prepare-only  # 只准备源码 + 补丁 + .config，不编译
 SKIP_FEEDS=1 ./build.sh    # 复用源码树里已装好的 feeds（重跑时省 10 分钟）
+VARIANT=experience CONFIG_SEED=config/h28k-experience.config ./build.sh  # 全功能体验版
 ```
+
+固件有两个 seed：
+
+- `config/h28k.config`：官方 ImmortalWrt 默认集 + 本项目的 WireGuard/网络向导，适合长期稳定使用。
+- `config/h28k-experience.config`：在默认集上追加 Argon 主题、Samba/autosamba、磁盘/文件管理、DLNA、UPnP、DDNS、WOL、SQM、mwan3、流量统计、frp、Tailscale、ZeroTier、Aria2、Transmission、Docker/Dockerman，适合先体验 ImmortalWrt 的完整插件生态。
+  代理类插件（OpenClash/PassWall/HomeProxy）彼此冲突且体积大，未预装；需要时在软件包页面单独选一个安装。
 
 要求：Linux x86_64、≥4 核、≥4GB 内存（8GB 更稳）、≥30GB 磁盘；Ubuntu 装好
 `build-essential clang flex bison gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools python3-pyelftools swig python3-dev rsync unzip zlib1g-dev file wget cpio`。

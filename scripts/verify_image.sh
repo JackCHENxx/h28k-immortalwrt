@@ -77,6 +77,16 @@ grep -q "private_key" "$WORK/wgctl.txt" && grep -q "public_key" "$WORK/wgctl.txt
 	|| fail "WireGuard 后端使用了错误的 UCI 键名"
 debugfs -R "stat /www/luci-static/resources/view/netmode/wireguard.js" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
 	|| fail "缺 WireGuard 设置页面"
+# 体验版额外校验：确认 Argon 主题和关键插件不是“只写进 config、没进镜像”
+if [ -n "${EXPECT_EXTRA:-}" ]; then
+	for pkg in $EXPECT_EXTRA; do
+		grep -q "^P:$pkg$" "$WORK/pkgs.txt" || fail "缺体验版插件 $pkg"
+	done
+fi
+if [ "${EXPECT_ARGON:-0}" = 1 ]; then
+	debugfs -R "stat /etc/uci-defaults/30_luci-theme-argon" "$WORK/rootfs.ext4" >/dev/null 2>&1 \
+		|| fail "缺 Argon 默认主题脚本（登录页仍是 bootstrap）"
+fi
 ok "默认 IP、DHCP 池、WireGuard、wgctl、设置页面均在镜像内"
 
 echo "[verify] 全部通过: $IMG"

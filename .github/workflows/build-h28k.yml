@@ -7,6 +7,13 @@ on:
         description: "ImmortalWrt release tag，留空=自动取最新 stable release"
         required: false
         default: ""
+      variant:
+        description: "固件版本：default=官方默认集，experience=Argon+主流插件全功能版"
+        type: choice
+        options:
+          - default
+          - experience
+        default: default
   schedule:
     - cron: "0 20 * * 0"   # 每周一 04:00 (UTC+8) 自动跟一次最新 release
 
@@ -48,6 +55,8 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
           JOBS: 4
+          VARIANT: ${{ inputs.variant || 'default' }}
+          CONFIG_SEED: ${{ inputs.variant == 'experience' && 'config/h28k-experience.config' || 'config/h28k.config' }}
         run: ./build.sh
 
       - name: 生成摘要
@@ -61,12 +70,15 @@ jobs:
           fi
 
       - name: 校验镜像
+        env:
+          EXPECT_EXTRA: ${{ inputs.variant == 'experience' && 'luci-theme-argon luci-app-argon-config autosamba luci-app-samba4 luci-app-diskman luci-app-filemanager luci-app-dockerman' || '' }}
+          EXPECT_ARGON: ${{ inputs.variant == 'experience' && '1' || '0' }}
         run: ./scripts/verify_image.sh out/*-ext4-sysupgrade.img.gz
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: immortalwrt-h28k
+          name: immortalwrt-h28k-${{ inputs.variant || 'default' }}
           path: out/
           if-no-files-found: warn
           retention-days: 30
@@ -76,10 +88,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          VARIANT="${{ inputs.variant }}"
+          [ -n "$VARIANT" ] || VARIANT="default"
           REL="${{ inputs.tag }}"
-          [ -n "$REL" ] || REL="h28k-latest"
+          if [ -z "$REL" ]; then
+            if [ "$VARIANT" = "experience" ]; then REL="h28k-experience"; else REL="h28k-latest"; fi
+          fi
           if ! gh release view "$REL" >/dev/null 2>&1; then
             gh release create "$REL" --title "ImmortalWrt H28K ${REL}" \
-              --notes "自动构建（$(date -u +%Y-%m-%d)），设备 HINLINK H28K / RK3528"
+              --notes "自动构建（$(date -u +%Y-%m-%d)），设备 HINLINK H28K / RK3528，variant=${VARIANT}"
           fi
           gh release upload "$REL" out/*.gz out/sha256sums.txt out/build-info.txt --clobber

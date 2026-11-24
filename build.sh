@@ -15,6 +15,9 @@ TAG="${TAG:-}"
 JOBS="${JOBS:-$(nproc)}"
 SRC="${SRC:-$KIT_DIR/.build/immortalwrt}"
 OUT="${OUT:-$KIT_DIR/out}"
+CONFIG_SEED="${CONFIG_SEED:-$KIT_DIR/config/h28k.config}"
+VARIANT="${VARIANT:-default}"
+case "$CONFIG_SEED" in /*) ;; *) CONFIG_SEED="$KIT_DIR/$CONFIG_SEED" ;; esac
 PREPARE_ONLY=0
 
 while [ $# -gt 0 ]; do
@@ -45,7 +48,8 @@ latest_tag() {
 
 [ -n "$TAG" ] || TAG="$(latest_tag)"
 [ -n "$TAG" ] || { echo "取不到 ImmortalWrt 的 release tag，请手动指定 TAG=" >&2; exit 1; }
-log "ImmortalWrt release: $TAG"
+log "ImmortalWrt release: $TAG (variant=$VARIANT)"
+[ -f "$CONFIG_SEED" ] || { echo "配置种子不存在: $CONFIG_SEED" >&2; exit 1; }
 
 # 磁盘检查：全量编译需要 ~30GB
 avail=$(df -Pk "$KIT_DIR" | awk 'NR==2{print int($4/1024/1024)}')
@@ -80,7 +84,7 @@ fi
 
 # 4. 生成 .config
 log "写入 H28K 配置"
-cp "$KIT_DIR/config/h28k.config" "$SRC/.config"
+cp "$CONFIG_SEED" "$SRC/.config"
 make -C "$SRC" defconfig
 grep -q 'CONFIG_TARGET_rockchip_armv8_DEVICE_hinlink_h28k=y' "$SRC/.config" \
 	|| { echo "配置里没有 hinlink_h28k 设备，补丁未生效" >&2; exit 1; }
@@ -107,6 +111,8 @@ find "$SRC/bin/targets/rockchip/armv8" -maxdepth 1 -name '*hinlink_h28k*' \
 {
 	echo "ImmortalWrt release: $TAG"
 	echo "device: hinlink_h28k (HINLINK H28K / Seeed LinkStar H28K, RK3528)"
+	echo "variant: $VARIANT"
+	echo "config: $(basename "$CONFIG_SEED")"
 	echo "built: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 } > "$OUT/build-info.txt"
 
